@@ -57,6 +57,7 @@ What the run gets, all inside the run folder:
 - its own `HOME` (`home/`, empty at start), so `~/.guslar/world.json` is the run's, never the user's
 - its own `world.json`, which the run's Guslar is started with as `--world <absolute path>`: `forest` is `./repos/bogwater` named `Bogwater Reach`, `river-town` is `./repos/kettle` with no name, and the four other slots are fog
 - its own `BROWSER`, which records the URL Guslar asked to open in `browser.log` and opens nothing
+- its own `GUSLAR_CLAUDE`, a recorder that stands in for every hunter's `claude`: it writes how it was started (folder, arguments, `GUSLAR_HUNTER_ID`) and every line it is sent to `claude.log`, each line prefixed `[pid <n>]`, and runs until Guslar ends its stdin; no real Claude Code session starts
 - its own headless Chromium, with its profile in `chrome/` and a 1440x900 viewport
 
 Start options:
@@ -94,7 +95,7 @@ Unfit because the build is stale means your edit is not in the running product: 
 | `snapshot` | Prints `url: …` and the current page's accessibility tree, without reloading. |
 | `wait-for <text> [--gone] [--timeout ms]` | Waits up to 15 s (or `--timeout`) for text to appear on the page, or with `--gone` to leave it. Prints `"<text>" is visible after <n> ms` or `"<text>" is gone after <n> ms`, and exits 1 if it did not happen. |
 | `screenshot <name> [--size WxH] [--clip x,y,w,h [--zoom n]]` | Saves `<name>.png` in the run folder (names use letters, digits, `-` and `_`) and prints `saved <file> (<W>x<H>)`. `--size` changes the run's viewport for this and every later command; a screenshot with `--size 1440x900` puts back the default. `--clip` saves only that part of the page, in page pixels, and `--zoom` (1 to 4) renders it magnified, for a close look at a detail; it prints `saved <file> (<W>x<H>: <w>x<h> at <x>,<y>, zoom <n>)`. Crops are evidence too, so take them this way rather than cropping a file yourself. Zoom 4 is as close as the art goes: its own resolution is the limit, and a larger `--size` shows nothing more. |
-| `world` | Connects to `/ws` as a map does and prints the first message, pretty-printed JSON shaped `{"type": "world", "world": {"slots": [...]}}`. |
+| `world` | Connects to `/ws` as a map does and prints the first message, pretty-printed JSON shaped `{"type": "world", "world": {"slots": [...], "hunters": [...]}}`. |
 | `http <path>` | GETs a path of this run's Guslar and prints `HTTP <status> <content type>`, then the body. |
 | `guslar [--env GUSLAR_WORLD=<file>] [args…]` | Runs a one-off `guslar --port 0 --no-open [args…]` in the run folder with the run's environment; your args come last and override those defaults. It does not get the run's `world.json`: without `--world` or `GUSLAR_WORLD` it reads `home/.guslar/world.json`. It never opens a browser, so `browser.log` does not change. It prints `one-off guslar pid <n>`, what Guslar printed, then either `guslar exited by itself: <code>`, or `it started; world served at /api/world: <json>` and `stopped it`, and last `pid <n> has ended`. |
 | `click <name>` | Clicks the one button whose accessible name contains `<name>`, as a user clicking it, and prints `clicked button "<full name>"`. With none or several matching, it says so, lists every button's name, and exits 1. |
@@ -114,6 +115,9 @@ Handles to use:
 - The list named `Villages`, after `Regions`: one item per spec, region by region in slot order, each a button named `<village title> , village in <region name>`.
   Beside its button, each item has the village's stage as text: `Bounty drafted`, `Contracts posted` or `Cleared`.
 - An opened village is a dialog named `Notice board of <village title>`, with a button `Close the notice board` and a list `Contracts` whose items read `<id> <afk|hitl> <title> <state>`, the state being `Done`, `Pending`, `Ready` or `Sealed by <ids>`.
+- On a ready contract, a button `Take <id>`; a contract with a hunter out on it reads `… Ready <hunter name> hunts it` instead.
+  `Take` opens a dialog `Send a hunter on <id>`, with a list `Permission modes` of four buttons, whose names start `Ask before every tool`, `Edit files freely`, `Let Claude judge` and `Never ask`, and a button `Cancel`.
+  A village with a hunter out answers `Take` with an alert `<village title> refuses a second hunter: <hunter name> is out on <id>.`
 - On the CLI: the lines `Guslar reads <file> (<n> regions)` and `Guslar is listening on <url>`, and refusals starting `guslar: `.
 
 The map itself is a canvas: its art and fog are checked by screenshot, and everything a check asserts in words comes from the accessibility tree, the broadcast or the CLI.
@@ -157,7 +161,7 @@ The proof bar:
 - Capture the action and the state it led to, not only the final screen.
 - Check side effects as well as what is visible: files written, what the browser was asked to open, what the server broadcasts.
 - Cover every entry point the map lists for the feature. One not driven is reported as not driven, never as verified through another.
-- Use a fake only where production already puts a boundary around the external system the check is not about. Here that is `BROWSER`: the recorder stands in for the user's browser, and the run's own Chromium loads the page.
+- Use a fake only where production already puts a boundary around the external system the check is not about. Here that is `BROWSER`, where the recorder stands in for the user's browser and the run's own Chromium loads the page, and `GUSLAR_CLAUDE`, where the recorder stands in for Claude Code.
 - Copy command output from `transcript.log`; never paraphrase it. Each call there is a block: `$ <command>`, its output, then `[exit <n>]`. Copy whole blocks, those two lines included.
 - Open every screenshot you take and look at it against the whole bar, whatever the step names. A defect fails the check whose subject it is (the map's art and fog belong to [Open the world](../../../docs/manual/open-the-world.md)); in any other check whose screenshot shows it, note it and leave that check's verdict to its own subject. A look that is off is a `fail`, even when the words pass: a region cropped, black bars or a hard edge around the map, a plaque off its region or over another, or fog that does not hide its region.
 - The painted world is what lies inside its double border line; the margin outside it (autumn trees, drifting cloud, the blurred frame) belongs to no slot, and fog never has to hide it. The line is clearest at the left and right; at the top and bottom it runs into the map's own faded edge, and everything in that fade is margin: at 1440x900, the blurred autumn trees along the bottom (below y 780) and top are margin.
@@ -171,6 +175,7 @@ The proof bar:
 .agents/skills/verify/verify.mjs stop --run <run folder>
 ```
 
-It sends `SIGTERM` to this run's Guslar and browser by their recorded pids, never by name, waits until each is gone (escalating to `SIGKILL` after 5 s), and prints `stopped guslar (pid <n>) with SIGTERM`, `stopped browser (pid <n>) with SIGTERM` and `evidence stays in <run folder>`. If either survived it prints `still running: <pids>` and exits 1.
+It sends `SIGTERM` to this run's Guslar and browser by their recorded pids, never by name, waits until each is gone (escalating to `SIGKILL` after 5 s), and prints `stopped guslar (pid <n>) with SIGTERM`, `stopped browser (pid <n>) with SIGTERM` and `evidence stays in <run folder>`.
+When Guslar started any hunters, it also waits for each recorder claude in `claude.log` to exit, which it does once Guslar ends its stdin, and prints `claudes ended: <n> of <n>`. If either survived it prints `still running: <pids>` and exits 1.
 Then run `doctor` once more: it must say `unfit`, with both processes not running.
 The run folder, its screenshots, `transcript.log` and `evidence.md` stay.

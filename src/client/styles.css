@@ -351,3 +351,205 @@ main {
   clip-path: circle(47%);
   transform: translate(-50%, -50%) rotate(-24deg);
 }
+
+/* Taking a contract: the ready card's Take, the hunter who holds it, and the village's refusal. */
+
+/* Take and the hunter's name stand just above the state, which keeps the card's foot. */
+.card-text:has(.card-take, .card-hunter) .card-state {
+  order: 2;
+  margin-top: 3cqw;
+}
+
+/* The hunter's name sits higher, so it clears the seal's top, which stands above the state line. */
+.card-text:has(.card-hunter) .card-state {
+  margin-top: 7cqw;
+}
+
+.card-take,
+.card-hunter {
+  order: 1;
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+.card-take {
+  padding: 0.12em 0.7em 0.2em;
+  color: var(--bone);
+  font: inherit;
+  font-size: 11cqw;
+  line-height: 1.1;
+  letter-spacing: 0.03em;
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 0 0 1.5px var(--ink),
+    inset 0 0 0 2.5px rgb(217 203 168 / 0.55),
+    1px 2px 0 rgb(29 24 18 / 0.35);
+  cursor: pointer;
+}
+
+.card-take:hover,
+.card-take:focus-visible {
+  background: var(--rust);
+  border-color: var(--rust);
+  box-shadow:
+    inset 0 0 0 1.5px var(--rust),
+    inset 0 0 0 2.5px rgb(217 203 168 / 0.6),
+    1px 2px 0 rgb(29 24 18 / 0.35);
+  outline: none;
+}
+
+/* Kept clear of the torn right edge; a long name wraps, balanced, rather than run into it. */
+.card-hunter {
+  max-width: 88%;
+  color: var(--rust);
+  font-size: 9.5cqw;
+  font-style: italic;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+.board-refusal {
+  position: absolute;
+  left: 50%;
+  top: 91%;
+  width: max-content;
+  max-width: 78%;
+  margin: 0;
+  padding: 0.4em 1em 0.5em;
+  color: var(--ink);
+  font-size: 2.1cqh;
+  line-height: 1.25;
+  text-align: center;
+  text-wrap: balance;
+  background: var(--bone);
+  border: 1.5px solid var(--rust);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 0 0 3px var(--bone),
+    inset 0 0 0 4px rgb(138 59 42 / 0.5),
+    2px 3px 0 rgb(29 24 18 / 0.45);
+  transform: translate(-50%, -50%);
+}
+
+/* The chooser: a parchment over the board, one row per permission mode. */
+
+.chooser {
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 22px 24px 20px;
+  overflow: auto;
+  color: var(--ink);
+  font-size: 17px;
+  background: var(--bone);
+  border: 1.5px solid var(--ink);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 0 0 4px var(--bone),
+    inset 0 0 0 5px rgb(36 28 20 / 0.45),
+    4px 8px 18px rgb(0 0 0 / 0.55);
+}
+
+.chooser::backdrop {
+  background: rgb(29 24 18 / 0.55);
+}
+
+.chooser-heading {
+  margin: 0;
+  font-size: 26px;
+  font-weight: normal;
+  line-height: 1.1;
+}
+
+.chooser-title {
+  margin: 4px 0 0;
+  font-size: 19px;
+  font-style: italic;
+}
+
+.chooser-ask {
+  margin: 16px 0 10px;
+}
+
+.chooser-modes {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chooser-mode {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 12px;
+  width: 100%;
+  padding: 8px 12px 9px;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  background: rgb(255 250 235 / 0.35);
+  border: 1px solid rgb(36 28 20 / 0.55);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.chooser-mode:hover,
+.chooser-mode:focus-visible {
+  background: rgb(255 250 235 / 0.7);
+  border-color: var(--rust);
+  outline: 1px solid var(--rust);
+}
+
+.chooser-mode:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.chooser-label {
+  font-size: 19px;
+  line-height: 1.2;
+}
+
+.chooser-detail {
+  grid-column: 1;
+  color: rgb(36 28 20 / 0.78);
+  font-size: 15px;
+  font-style: italic;
+  line-height: 1.25;
+}
+
+.chooser-flag {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: rgb(36 28 20 / 0.62);
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+}
+
+.chooser-problem {
+  margin: 12px 0 0;
+  padding: 6px 10px;
+  color: var(--rust);
+  border-left: 3px solid var(--rust);
+}
+
+.chooser-cancel {
+  display: block;
+  margin: 16px 0 0 auto;
+  padding: 0.2em 0.9em 0.3em;
+  color: var(--bone);
+  font: inherit;
+  background: var(--night);
+  border: 1px solid var(--rust);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.chooser-cancel:hover,
+.chooser-cancel:focus-visible {
+  background: var(--rust);
+  outline: none;
+}

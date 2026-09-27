@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util"
 import path from "node:path"
-import { REGION_SLOTS, type RegionSlot, type SlotState, type World, type WorldState } from "../shared/world.js"
+import { REGION_SLOTS, type RegionSlot, type SlotState, type World } from "../shared/world.js"
 import { RegionReader } from "./region.js"
 
 /** How often the repos are read again, so the map follows what the skills write. */
@@ -14,8 +14,8 @@ export class WorldReader {
     for (const region of world.regions) this.readers.set(region.slot, new RegionReader(region.repo))
   }
 
-  async read(): Promise<WorldState> {
-    const slots = await Promise.all(
+  async read(): Promise<SlotState[]> {
+    return Promise.all(
       REGION_SLOTS.map(async (slot): Promise<SlotState> => {
         const region = this.world.regions.find((r) => r.slot === slot)
         const reader = this.readers.get(slot)
@@ -29,14 +29,13 @@ export class WorldReader {
         }
       }),
     )
-    return { slots }
   }
 
   /**
    * Reads the world again every second and calls `onChange` whenever it differs from
    * `current`. A read that fails is reported once and the last good world stays.
    */
-  follow(current: WorldState, onChange: (world: WorldState) => void): () => void {
+  follow(current: SlotState[], onChange: (slots: SlotState[]) => void): () => void {
     let timer: ReturnType<typeof setTimeout> | undefined
     let stopped = false
     let lastError = ""

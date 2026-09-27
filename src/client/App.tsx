@@ -15,8 +15,14 @@ export function App() {
     <main>
       <h1 className="visually-hidden">Guslar</h1>
       <WorldMap world={world} onOpenVillage={setOpened} />
-      {village && (
-        <NoticeBoard key={`${opened?.slot}/${village.slug}`} village={village} onClose={() => setOpened(undefined)} />
+      {opened && village && (
+        <NoticeBoard
+          key={`${opened.slot}/${village.slug}`}
+          slot={opened.slot}
+          village={village}
+          hunters={world?.hunters.filter((h) => h.slot === opened.slot && h.village === village.slug) ?? []}
+          onClose={() => setOpened(undefined)}
+        />
       )}
       {world && !connected && (
         <p className="notice" role="status">

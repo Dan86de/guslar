@@ -23,20 +23,30 @@ export type Running = {
   url: string
   home: string
   browserLog: string
+  /** What the fake claude recorded, one JSON line per event, for every hunter Guslar started. */
+  claudeLog: string
   process: ChildProcess
   output(): string
   stop(): Promise<void>
 }
 
-/** Starts Guslar the way a user does, with a throwaway HOME and a fake browser. */
-export async function startGuslar(args: string[], home = tempDir()): Promise<Running> {
+/** Starts Guslar the way a user does, with a throwaway HOME, a fake browser and a fake claude. */
+export async function startGuslar(
+  args: string[],
+  home = tempDir(),
+  env: Record<string, string> = {},
+): Promise<Running> {
   const browserLog = path.join(home, "browser.log")
+  const claudeLog = path.join(home, "claude.log")
   const child = spawn(process.execPath, [binPath(), "--port", "0", ...args], {
     env: {
       PATH: process.env.PATH,
       HOME: home,
       BROWSER: path.join(fixtures, "fake-browser.mjs"),
       FAKE_BROWSER_LOG: browserLog,
+      GUSLAR_CLAUDE: path.join(fixtures, "fake-claude.mjs"),
+      FAKE_CLAUDE_LOG: claudeLog,
+      ...env,
     },
     stdio: ["ignore", "pipe", "pipe"],
   })
@@ -58,6 +68,7 @@ export async function startGuslar(args: string[], home = tempDir()): Promise<Run
     url,
     home,
     browserLog,
+    claudeLog,
     process: child,
     output: () => output,
     stop: () =>

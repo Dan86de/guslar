@@ -106,14 +106,27 @@ async function waitFor(check, what, timeoutMs = 15000) {
   }
 }
 
-/** The environment Guslar runs with: this run's HOME and browser opener, and none of the user's settings. */
+/** The environment Guslar runs with: this run's HOME, browser opener and claude, and none of the user's settings. */
 function guslarEnv(run) {
   return {
     PATH: process.env.PATH,
     HOME: path.join(run, "home"),
     BROWSER: path.join(SKILL_DIR, "record-browser.mjs"),
     VERIFY_BROWSER_LOG: path.join(run, "browser.log"),
+    GUSLAR_CLAUDE: RECORD_CLAUDE,
+    VERIFY_CLAUDE_LOG: path.join(run, "claude.log"),
   }
+}
+
+const RECORD_CLAUDE = path.join(SKILL_DIR, "record-claude.mjs")
+
+/** The recorder claudes this run's Guslar started, by the pids they logged. */
+function recordedClaudes(run) {
+  const log = path.join(run, "claude.log")
+  if (!existsSync(log)) return []
+  const pids = new Set()
+  for (const match of readFileSync(log, "utf8").matchAll(/^\[pid (\d+)\] started in /gm)) pids.add(Number(match[1]))
+  return [...pids]
 }
 
 /** Starts Guslar for this run, on `port` (0 picks a free one), and waits for its ready line. */
@@ -587,8 +600,19 @@ const commands = {
     const run = runDir(flags)
     const state = readState(run)
     await stopPid(state.guslarPid, "guslar")
+    // A stopped Guslar ends its hunters' stdin, so each recorder claude exits by itself; wait for it.
+    const claudes = recordedClaudes(run)
+    for (const pid of claudes) {
+      if (!alive(pid) || !commandOf(pid).includes(RECORD_CLAUDE)) continue
+      try {
+        await waitFor(() => !alive(pid), "claude to exit", 5000)
+      } catch {
+        await stopPid(pid, "claude")
+      }
+    }
+    if (claudes.length) out(`claudes ended: ${claudes.filter((pid) => !alive(pid)).length} of ${claudes.length}`)
     await stopPid(state.chromePid, "browser")
-    const left = [state.guslarPid, state.chromePid].filter(alive)
+    const left = [state.guslarPid, state.chromePid, ...claudes].filter(alive)
     if (left.length) {
       out(`still running: ${left.join(", ")}`)
       return 1

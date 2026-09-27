@@ -2,6 +2,7 @@
 import { parseArgs } from "node:util"
 import { openBrowser } from "./browser.js"
 import { defaultWorldPath, loadWorld, WorldConfigError } from "./config.js"
+import { Hunters } from "./hunters.js"
 import { startServer } from "./server.js"
 import { WorldReader } from "./world.js"
 
@@ -14,6 +15,11 @@ const USAGE = `Usage: guslar [options]
   --host <addr>    address to listen on (default: 127.0.0.1)
   --no-open        do not open the browser
   -h, --help       show this help
+
+Environment:
+  GUSLAR_WORLD     world.json to read when --world is not given
+  GUSLAR_CLAUDE    the claude program hunters run (default: claude on the PATH)
+  BROWSER          the program to open the map with, or none
 `
 
 async function main(): Promise<void> {
@@ -44,9 +50,11 @@ async function main(): Promise<void> {
   const reader = new WorldReader(world)
   const initial = await reader.read()
 
+  const hunters = new Hunters(process.env.GUSLAR_CLAUDE?.trim() || "claude")
+
   let server
   try {
-    server = await startServer({ world: initial, host: values.host, port })
+    server = await startServer({ slots: initial, hunters, host: values.host, port })
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
       throw new WorldConfigError(`port ${port} is taken. Is Guslar already running? Pick another with --port.`)
@@ -59,12 +67,13 @@ async function main(): Promise<void> {
   console.log(`Guslar is listening on ${server.url}`)
 
   const running = server
-  const unfollow = reader.follow(initial, (next) => running.broadcast(next))
+  const unfollow = reader.follow(initial, (next) => running.update(next))
 
   if (values.open) openBrowser(server.url)
 
   const stop = () => {
     unfollow()
+    hunters.close()
     void server.close().then(() => process.exit(0))
   }
   process.once("SIGINT", stop)

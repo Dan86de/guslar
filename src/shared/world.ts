@@ -49,10 +49,43 @@ export type SlotState =
   | { slot: RegionSlot; kind: "region"; name: string; repo: string; villages: Village[] }
   | { slot: RegionSlot; kind: "fog" }
 
+/**
+ * How far a hunter may go without asking you, passed to `claude --permission-mode`:
+ * `default` asks before every tool, `acceptEdits` edits files freely and asks for the rest,
+ * `auto` lets Claude judge what is safe, and `bypassPermissions` never asks.
+ */
+export const PERMISSION_MODES = ["default", "acceptEdits", "auto", "bypassPermissions"] as const
+
+export type PermissionMode = (typeof PERMISSION_MODES)[number]
+
+/** A Claude Code session Guslar started on a contract, while its process runs. */
+export type Hunter = {
+  /** Given to the session as `GUSLAR_HUNTER_ID`, so its hooks and stream join up. */
+  id: string
+  name: string
+  /** The region, village and contract it rides for. */
+  slot: RegionSlot
+  village: string
+  contract: string
+  permissionMode: PermissionMode
+}
+
 /** What the server broadcasts to every open map. Slots are always in REGION_SLOTS order. */
-export type WorldState = { slots: SlotState[] }
+export type WorldState = { slots: SlotState[]; hunters: Hunter[] }
+
+/** What a map posts to `/api/hunters` to send a hunter on a ready contract. */
+export type TakeRequest = { slot: RegionSlot; village: string; contract: string; permissionMode: PermissionMode }
+
+/** A village takes one hunter at a time; this is what it says to a second one. */
+export function refusalOf(village: Pick<Village, "title">, holder: Pick<Hunter, "name" | "contract">): string {
+  return `${village.title} refuses a second hunter: ${holder.name} is out on ${holder.contract}.`
+}
 
 export type ServerMessage = { type: "world"; world: WorldState }
+
+export function isPermissionMode(value: unknown): value is PermissionMode {
+  return typeof value === "string" && (PERMISSION_MODES as readonly string[]).includes(value)
+}
 
 export function isRegionSlot(value: unknown): value is RegionSlot {
   return typeof value === "string" && (REGION_SLOTS as readonly string[]).includes(value)
