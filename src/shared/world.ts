@@ -101,7 +101,23 @@ export type Hunter = {
   lastHook?: HookSighting
   /** The permission its session is waiting on you for, oldest first, while one is. */
   prompt?: PermissionPrompt
+  /** The Claude Code session it runs, once the session has said so; "open in terminal" resumes it. */
+  sessionId?: string
+  /** The terminal its session was resumed in, once one was opened. */
+  terminal?: HunterTerminal
 }
+
+/**
+ * A terminal a hunter's session was resumed in: `open` while the `claude --resume` in it runs,
+ * `ended` once it has exited, with its exit code.
+ */
+export type HunterTerminal = { state: "open" } | { state: "ended"; exitCode: number }
+
+/** What a map sends down a hunter's terminal socket: keys typed, or the size it now shows. */
+export type TerminalInput = { type: "input"; data: string } | { type: "resize"; cols: number; rows: number }
+
+/** What a hunter's terminal socket sends a map: what the terminal wrote, or that its session ended. */
+export type TerminalOutput = { type: "output"; data: string } | { type: "ended"; exitCode: number }
 
 /**
  * A permission a hunter's session asks for through its `PermissionRequest` hook: the tool and

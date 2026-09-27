@@ -68,11 +68,13 @@ export function Journal({
   hunter,
   contractTitle,
   villageTitle,
+  onOpenTerminal,
   onClose,
 }: {
   hunter: Hunter
   contractTitle: string | undefined
   villageTitle: string
+  onOpenTerminal: () => void
   onClose: () => void
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
@@ -137,7 +139,18 @@ export function Journal({
           {hunter.contract}
           {contractTitle ? ` ${contractTitle}` : ""}, <span className="journal-village">{villageTitle}</span>
         </p>
-        <p className="journal-state">{HUNTER_STATE_NAMES[hunter.state]}</p>
+        <div className="journal-status">
+          <p className="journal-state">{HUNTER_STATE_NAMES[hunter.state]}</p>
+          <button
+            type="button"
+            className="journal-terminal"
+            disabled={!hunter.sessionId}
+            title={hunter.sessionId ? undefined : `${hunter.name}'s session has not begun yet.`}
+            onClick={onOpenTerminal}
+          >
+            Open in terminal
+          </button>
+        </div>
         <button type="button" className="journal-close" aria-label="Close the journal" onClick={() => dialog.current?.close()}>
           Close
         </button>

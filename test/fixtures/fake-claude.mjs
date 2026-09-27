@@ -8,6 +8,9 @@
 // a session waits for your reply once its turn is over. A line {"replay":"hook","event":…,"input":…}
 // is not sent either: as Claude Code does, it runs every hook the repo's
 // .claude/settings.local.json has for that event, with the event on the hook's stdin.
+// Started in a terminal, as "open in terminal" resumes a session, it replays nothing: it says
+// which session it resumed, records each line typed to it and answers it, and exits when the
+// terminal hangs up.
 import { spawnSync } from "node:child_process"
 import { appendFileSync, existsSync, readFileSync } from "node:fs"
 import path from "node:path"
@@ -56,6 +59,23 @@ async function replay(transcript, gates) {
 }
 
 record({ started: { cwd: process.cwd(), args: process.argv.slice(2), hunterId: process.env.GUSLAR_HUNTER_ID, url: process.env.GUSLAR_URL } })
+
+// In a terminal, it is a session resumed there: it says which, and answers each line typed to it.
+if (process.stdin.isTTY) {
+  record({ tty: { term: process.env.TERM } })
+  process.on("SIGHUP", () => {
+    record({ hungUp: true })
+    process.exit(0)
+  })
+  const resumed = process.argv[process.argv.indexOf("--resume") + 1]
+  process.stdout.write(`fake claude resumed ${resumed}\r\n`)
+  for await (const line of createInterface({ input: process.stdin })) {
+    record({ typed: line })
+    process.stdout.write(`heard: ${line}\r\n`)
+  }
+  record({ ended: true })
+  process.exit(0)
+}
 let replaying
 for await (const line of createInterface({ input: process.stdin })) {
   record({ stdin: line })

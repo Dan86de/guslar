@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
-import type { AddressInfo } from "node:net"
+import type { AddressInfo, Socket } from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import sirv from "sirv"
@@ -36,6 +36,9 @@ const MAX_HOOK_BODY = 16 * 1024 * 1024
 
 /** Where a map writes to one hunter: `/api/hunters/<id>/replies`. */
 const REPLIES = /^\/api\/hunters\/([0-9a-f-]{36})\/replies$/
+
+/** Where a map opens one hunter's terminal (POST), and shows and types into it (a WebSocket): `/api/hunters/<id>/terminal`. */
+const TERMINAL = /^\/api\/hunters\/([0-9a-f-]{36})\/terminal$/
 
 /** Where a map answers one hunter's prompt: `/api/hunters/<id>/prompts/<prompt id>`. */
 const PROMPTS = /^\/api\/hunters\/([0-9a-f-]{36})\/prompts\/([0-9a-f-]{36})$/
@@ -124,11 +127,18 @@ export async function startServer(options: {
    * answers to (which a rebound DNS name is not). A hook event moves a hunter on the map, so it
    * passes the same test; Guslar's hook runs outside any page and sends no origin.
    */
-  const fromOwnMap = (req: IncomingMessage): boolean => {
+  const fromOwnMap = (req: IncomingMessage): boolean =>
+    Boolean(req.headers["content-type"]?.startsWith("application/json")) && fromOwnOrigin(req)
+
+  /**
+   * Addressed to this machine by a name this server answers to, from this server's own origin or
+   * from no page at all. A WebSocket carries no content type, so this is the whole test for one:
+   * every browser sends the page's origin with it.
+   */
+  const fromOwnOrigin = (req: IncomingMessage): boolean => {
     const own = new Set([`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`, `${host}:${port}`])
     const addressed = req.headers.host ?? ""
     if (!own.has(addressed)) return false
-    if (!req.headers["content-type"]?.startsWith("application/json")) return false
     const origin = req.headers.origin
     if (origin === undefined) return true
     try {
@@ -191,6 +201,14 @@ export async function startServer(options: {
     else sendJson(res, result.status, { error: result.error })
   }
 
+  const openTerminal = async (id: string, req: IncomingMessage, res: ServerResponse) => {
+    const raw = await bodyOf(req, res, "Only the map this Guslar serves may open a hunter's terminal.")
+    if (raw === undefined) return
+    const result = await hunters.openTerminal(id)
+    if ("hunter" in result) sendJson(res, result.opened ? 201 : 200, { hunter: result.hunter })
+    else sendJson(res, result.status, { error: result.error })
+  }
+
   /**
    * A hook event from a session. A permission request from a hunter is held open until you
    * answer it on the map, and its hook gets your decision; if the hook goes before you answer,
@@ -242,6 +260,16 @@ export async function startServer(options: {
       res.end()
       return
     }
+    const terminalOf = TERMINAL.exec(req.url ?? "")?.[1]
+    if (terminalOf) {
+      if (req.method === "POST") {
+        openTerminal(terminalOf, req, res).catch((error: unknown) => sendJson(res, 500, { error: String(error) }))
+        return
+      }
+      res.writeHead(405, { allow: "POST" })
+      res.end()
+      return
+    }
     const prompt = PROMPTS.exec(req.url ?? "")
     if (prompt?.[1] && prompt[2]) {
       if (req.method === "POST") {
@@ -270,7 +298,44 @@ export async function startServer(options: {
     res.end("The map is not built. Run `npm run build` in the guslar package.\n")
   })
 
-  const sockets = new WebSocketServer({ server: http, path: "/ws" })
+  const sockets = new WebSocketServer({ noServer: true })
+  const terminalSockets = new WebSocketServer({ noServer: true })
+
+  /** Refuses a WebSocket before it opens, with a plain HTTP answer. */
+  const refuseUpgrade = (socket: Socket, status: number, reason: string) => {
+    socket.end(`HTTP/1.1 ${status} ${reason}\r\nconnection: close\r\ncontent-length: 0\r\n\r\n`)
+  }
+
+  /**
+   * `/ws` follows the world. A hunter's terminal socket runs keys in a program on this machine,
+   * so only the map this server serves may open one, and only onto a terminal that is open.
+   */
+  http.on("upgrade", (req: IncomingMessage, socket: Socket, head: Buffer) => {
+    if (req.url === "/ws") {
+      sockets.handleUpgrade(req, socket, head, (ws) => sockets.emit("connection", ws, req))
+      return
+    }
+    const id = TERMINAL.exec(req.url ?? "")?.[1]
+    if (!id) {
+      refuseUpgrade(socket, 404, "Not Found")
+      return
+    }
+    if (!fromOwnOrigin(req)) {
+      refuseUpgrade(socket, 403, "Forbidden")
+      return
+    }
+    hunters
+      .terminalOf(id)
+      .then((terminal) => {
+        if (!terminal) {
+          refuseUpgrade(socket, 404, "Not Found")
+          return
+        }
+        terminalSockets.handleUpgrade(req, socket, head, (ws) => terminal.attach(ws))
+      })
+      .catch(() => refuseUpgrade(socket, 500, "Internal Server Error"))
+  })
+
   const send = (socket: WebSocket) => {
     const message: ServerMessage = { type: "world", world: world() }
     socket.send(JSON.stringify(message))
@@ -299,8 +364,9 @@ export async function startServer(options: {
     },
     async close() {
       unsubscribe()
-      for (const socket of sockets.clients) socket.terminate()
+      for (const socket of [...sockets.clients, ...terminalSockets.clients]) socket.terminate()
       await new Promise<void>((resolve) => sockets.close(() => resolve()))
+      await new Promise<void>((resolve) => terminalSockets.close(() => resolve()))
       await new Promise<void>((resolve, reject) => http.close((error) => (error ? reject(error) : resolve())))
     },
   }

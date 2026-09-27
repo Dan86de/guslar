@@ -523,7 +523,9 @@ const commands = {
       const full = await textboxName(boxes)
       // Typed key by key, as a user does, so the page sees every keystroke.
       await boxes.click()
-      await boxes.fill("")
+      // Emptied only when it holds something: a terminal's input box is always empty, and
+      // emptying it anyway would type a Delete into the terminal.
+      if ((await boxes.inputValue()) !== "") await boxes.fill("")
       await boxes.pressSequentially(text)
       out(`filled text box "${full}" with: ${text}`)
     })

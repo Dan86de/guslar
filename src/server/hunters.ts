@@ -14,6 +14,7 @@ import type {
   TakeRequest,
 } from "../shared/world.js"
 import { isReturned, refusalOf } from "../shared/world.js"
+import { Terminal } from "./terminals.js"
 
 /** Names handed out in order, the first one no hunter out is using. Original, from Slavic naming, none from the Witcher. */
 const NAMES = [
@@ -39,6 +40,12 @@ export type ReplyResult = { sent: JournalEntry } | { status: number; error: stri
 
 /** What an answer to a prompt came to: given to the waiting hook, or why not, with the HTTP status that says so. */
 export type AnswerResult = { answered: PermissionPrompt } | { status: number; error: string }
+
+/**
+ * What opening a hunter's terminal came to: the hunter with its terminal, `opened` when this
+ * started it and not when it was already open, or why not, with the HTTP status that says so.
+ */
+export type TerminalResult = { hunter: Hunter; opened: boolean } | { status: number; error: string }
 
 /**
  * A permission request its hunter's hook is waiting on: `decision` settles with your answer, or
@@ -67,6 +74,11 @@ function promptInput(input: unknown): Record<string, unknown> {
     : {}
 }
 
+/** The arguments a hunter's session is resumed with in a terminal: interactive, in the permission mode it rode out with. */
+export function resumeArgs(sessionId: string, permissionMode: Hunter["permissionMode"]): string[] {
+  return ["--resume", sessionId, "--permission-mode", permissionMode]
+}
+
 /** The arguments every hunter's `claude` runs with: headless, stream-json both ways, one process across turns. */
 export function claudeArgs(permissionMode: Hunter["permissionMode"]): string[] {
   return [
@@ -91,6 +103,7 @@ function paid(state: ContractState | undefined): boolean {
 
 type StreamMessage = {
   type?: unknown
+  session_id?: unknown
   subtype?: unknown
   message?: { content?: unknown }
   request?: { subtype?: unknown }
@@ -207,7 +220,15 @@ function userMessage(text: string): string {
 export class Hunters {
   private readonly out = new Map<
     string,
-    { hunter: Hunter; process: ChildProcessWithoutNullStreams; asking: Pending[] }
+    {
+      hunter: Hunter
+      process: ChildProcessWithoutNullStreams
+      /** The repo it was sent into, where its session is resumed too. */
+      repo: string
+      asking: Pending[]
+      /** Its session resumed in a terminal, while that is being opened or once it has been. */
+      terminal?: Promise<Terminal | Error>
+    }
   >()
   private readonly listeners = new Set<() => void>()
   /** Where this Guslar listens, given to each hunter as `GUSLAR_URL` so its hooks can reach it. */
@@ -287,6 +308,7 @@ export class Hunters {
     child.stdin.on("error", () => {}) // a claude that exits early closes its stdin under us
     child.once("exit", (code, signal) => {
       this.release(hunter.id)
+      this.hangUp(hunter.id)
       this.out.delete(hunter.id)
       if (code !== 0 && code !== null) {
         const last = stderr.trim().split("\n").pop()
@@ -298,7 +320,7 @@ export class Hunters {
     })
 
     child.stdin.write(userMessage(opening))
-    this.out.set(hunter.id, { hunter, process: child, asking: [] })
+    this.out.set(hunter.id, { hunter, process: child, repo: region.repo, asking: [] })
     this.changed()
     return { hunter }
   }
@@ -315,6 +337,73 @@ export class Hunters {
     entry.hunter.journal.push(sent)
     this.changed()
     return { sent }
+  }
+
+  /**
+   * Resumes a hunter's session in a terminal: `claude --resume <its session id>` in a
+   * pseudo-terminal in its repo. A hunter has one terminal at a time: while it runs, opening it
+   * again gives that one, and once it has ended, opening it starts another.
+   *
+   * The terminal's session is yours, not the hunter's: it runs without `GUSLAR_HUNTER_ID`, so
+   * Guslar's hooks leave its permission requests to the terminal, where you are.
+   */
+  async openTerminal(id: string): Promise<TerminalResult> {
+    const entry = this.out.get(id)
+    if (!entry) return { status: 404, error: "No such hunter is out." }
+    const { hunter } = entry
+    const sessionId = hunter.sessionId
+    if (!sessionId) return { status: 409, error: `${hunter.name}'s session has not begun yet.` }
+
+    const previous = entry.terminal
+    if (previous) {
+      const terminal = await previous
+      if (this.out.get(id) !== entry) return { status: 404, error: "No such hunter is out." }
+      // Another open started a terminal while this one waited: that one is the hunter's.
+      if (entry.terminal !== previous) return this.openTerminal(id)
+      if (terminal instanceof Terminal && terminal.running) return { hunter, opened: false }
+    }
+
+    const env: NodeJS.ProcessEnv = { ...process.env, TERM: "xterm-256color", COLORTERM: "truecolor" }
+    delete env.GUSLAR_HUNTER_ID
+    if (this.url) env.GUSLAR_URL = this.url
+    const opening = Terminal.open(
+      { program: this.claude, args: resumeArgs(sessionId, hunter.permissionMode), cwd: entry.repo, env },
+      (exitCode) => {
+        if (this.out.get(id) !== entry || entry.terminal !== opening) return
+        hunter.terminal = { state: "ended", exitCode }
+        this.changed()
+      },
+    ).catch((error: unknown) => (error instanceof Error ? error : new Error(String(error))))
+    entry.terminal = opening
+
+    const terminal = await opening
+    if (terminal instanceof Error) {
+      if (entry.terminal === opening) delete entry.terminal
+      return { status: 502, error: `Could not open a terminal for ${hunter.name}: ${terminal.message}` }
+    }
+    if (this.out.get(id) !== entry) {
+      // The hunter left the map while its terminal opened.
+      terminal.kill()
+      return { status: 404, error: "No such hunter is out." }
+    }
+    hunter.terminal = { state: "open" }
+    this.changed()
+    return { hunter, opened: true }
+  }
+
+  /** The terminal a hunter's session was last resumed in, once it has opened. */
+  async terminalOf(id: string): Promise<Terminal | undefined> {
+    const terminal = await this.out.get(id)?.terminal
+    return terminal instanceof Terminal ? terminal : undefined
+  }
+
+  /** Hangs up a hunter's terminal, if it has one. */
+  private hangUp(id: string): void {
+    void this.out
+      .get(id)
+      ?.terminal?.then((terminal) => {
+        if (terminal instanceof Terminal) terminal.kill()
+      })
   }
 
   /**
@@ -424,6 +513,11 @@ export class Hunters {
       return // not stream-json: claude says nothing to the map outside it
     }
     if (typeof message !== "object" || message === null) return
+    const session = (message as StreamMessage).session_id
+    if (typeof session === "string" && session !== "" && session !== entry.hunter.sessionId) {
+      entry.hunter.sessionId = session
+      this.changed()
+    }
     const written = journalOf(message)
     entry.hunter.journal.push(...written)
     const next = afterMessage(entry.hunter.state, message)
@@ -467,6 +561,7 @@ export class Hunters {
     const entry = this.out.get(id)
     if (!entry) return
     this.release(id)
+    this.hangUp(id)
     this.out.delete(id)
     entry.process.stdin.end()
   }
@@ -475,6 +570,7 @@ export class Hunters {
   close(): void {
     for (const [id, { process }] of this.out) {
       this.release(id)
+      this.hangUp(id)
       process.stdin.end()
     }
   }
