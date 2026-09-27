@@ -56,12 +56,17 @@ export function fitMap(width: number, height: number): View {
 export type VillageSpot = { x: number; y: number; width: number }
 
 /** The widest a village is drawn, in map pixels, when its region has room. */
-const VILLAGE_WIDTH = 290
+const VILLAGE_WIDTH = 195
+
+/** How much of its share of the region a village's art fills, so it stands as a hamlet, not a town. */
+const VILLAGE_FILL = 2 / 3
 
 /**
- * Lays a region's villages out in rows of up to three, below its plaque, shrinking them
- * as there are more so they all stay inside the painted region. `aspect` is the village
- * art's height over its width; each village keeps room below it for its own name.
+ * Lays a region's villages out in rows of up to three, below its plaque. Each village gets
+ * an equal share of the painted region, shrinking as there are more so they all stay inside
+ * it, and stands at the centre of its share, drawn smaller than it so neighbours and their
+ * names keep a gap. `aspect` is the village art's height over its width; each share keeps
+ * room below the art for the village's own name.
  */
 export function villageSpots(slot: RegionSlot, count: number, aspect: number): VillageSpot[] {
   if (count === 0) return []
@@ -70,15 +75,16 @@ export function villageSpots(slot: RegionSlot, count: number, aspect: number): V
   const rows = Math.ceil(count / cols)
   const pitchX = 1.15
   const pitchY = aspect + 0.3
-  const width = Math.min(VILLAGE_WIDTH, (area.rx * 1.5) / (cols * pitchX), (area.ry * 1.25) / (rows * pitchY))
+  const share = Math.min((area.rx * 1.5) / (cols * pitchX), (area.ry * 1.25) / (rows * pitchY))
+  const width = Math.min(VILLAGE_WIDTH, share * VILLAGE_FILL)
   const centreY = area.y + area.ry * 0.2
   return Array.from({ length: count }, (_, index) => {
     const row = Math.floor(index / cols)
     const inRow = Math.min(cols, count - row * cols)
     const col = index - row * cols
     return {
-      x: area.x + (col - (inRow - 1) / 2) * width * pitchX,
-      y: centreY + (row - (rows - 1) / 2) * width * pitchY,
+      x: area.x + (col - (inRow - 1) / 2) * share * pitchX,
+      y: centreY + (row - (rows - 1) / 2) * share * pitchY,
       width,
     }
   })
