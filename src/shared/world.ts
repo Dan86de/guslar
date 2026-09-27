@@ -73,6 +73,17 @@ export function isReturned(hunter: Pick<Hunter, "state">): boolean {
   return hunter.state === "returned-trophy" || hunter.state === "returned-wounded"
 }
 
+/**
+ * One line of a hunter's journal, read from its session's stream-json as it arrives: what was
+ * sent to the session (`you`: the opening command and every reply), what it said, each tool it
+ * called with the gist of its input, and the result that closes each turn.
+ */
+export type JournalEntry =
+  | { kind: "you"; text: string }
+  | { kind: "said"; text: string }
+  | { kind: "tool"; tool: string; input: string }
+  | { kind: "result"; text: string; error: boolean }
+
 /** A Claude Code session Guslar started on a contract, while its process runs. */
 export type Hunter = {
   /** Given to the session as `GUSLAR_HUNTER_ID`, so its hooks and stream join up. */
@@ -84,6 +95,8 @@ export type Hunter = {
   contract: string
   permissionMode: PermissionMode
   state: HunterState
+  /** The conversation so far, oldest first. */
+  journal: JournalEntry[]
 }
 
 /** What the server broadcasts to every open map. Slots are always in REGION_SLOTS order. */
@@ -91,6 +104,9 @@ export type WorldState = { slots: SlotState[]; hunters: Hunter[] }
 
 /** What a map posts to `/api/hunters` to send a hunter on a ready contract. */
 export type TakeRequest = { slot: RegionSlot; village: string; contract: string; permissionMode: PermissionMode }
+
+/** What a map posts to `/api/hunters/<id>/replies` to write to a hunter in its journal. */
+export type ReplyRequest = { text: string }
 
 /** A village takes one hunter at a time; this is what it says to a second one. */
 export function refusalOf(village: Pick<Village, "title">, holder: Pick<Hunter, "name" | "contract">): string {

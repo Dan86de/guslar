@@ -22,8 +22,11 @@ export type GuslarServer = {
   close(): Promise<void>
 }
 
-/** The largest request body the server reads: a take is a few hundred bytes. */
+/** The largest request body the server reads: a take is a few hundred bytes, a reply a few pages at most. */
 const MAX_BODY = 64 * 1024
+
+/** Where a map writes to one hunter: `/api/hunters/<id>/replies`. */
+const REPLIES = /^\/api\/hunters\/([0-9a-f-]{36})\/replies$/
 
 /** The built map lives in dist/client, next to this file's dist/server. */
 function clientDir(): string {
@@ -64,6 +67,12 @@ function parseTake(raw: unknown): TakeRequest | string {
   return { slot, village, contract, permissionMode }
 }
 
+function parseReply(raw: unknown): string | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined
+  const { text } = raw as Record<string, unknown>
+  return typeof text === "string" ? text : undefined
+}
+
 export async function startServer(options: {
   slots: SlotState[]
   hunters: Hunters
@@ -79,8 +88,8 @@ export async function startServer(options: {
   let port = 0
 
   /**
-   * A take starts a program on the user's machine, so only the map this server serves may ask
-   * for one: a JSON body (which a page elsewhere cannot send without a preflight this server
+   * A take starts a program on the user's machine, and a reply tells it what to do, so only the
+   * map this server serves may ask for either: a JSON body (which a page elsewhere cannot send without a preflight this server
    * never answers), from this server's own origin, addressed to this machine by a name it
    * answers to (which a rebound DNS name is not).
    */
@@ -98,18 +107,23 @@ export async function startServer(options: {
     }
   }
 
-  const take = async (req: IncomingMessage, res: ServerResponse) => {
+  /** The JSON a request from the map carries, or undefined once it has been answered with why not. */
+  const bodyOf = async (req: IncomingMessage, res: ServerResponse, forbidden: string): Promise<unknown> => {
     if (!fromOwnMap(req)) {
-      sendJson(res, 403, { error: "Only the map this Guslar serves may send a hunter." })
-      return
+      sendJson(res, 403, { error: forbidden })
+      return undefined
     }
-    let raw: unknown
     try {
-      raw = JSON.parse(await readBody(req))
+      return JSON.parse(await readBody(req)) as unknown
     } catch (error) {
       sendJson(res, 400, { error: `The request cannot be read: ${(error as Error).message}` })
-      return
+      return undefined
     }
+  }
+
+  const take = async (req: IncomingMessage, res: ServerResponse) => {
+    const raw = await bodyOf(req, res, "Only the map this Guslar serves may send a hunter.")
+    if (raw === undefined) return
     const request = parseTake(raw)
     if (typeof request === "string") {
       sendJson(res, 400, { error: `The request cannot be read: ${request}` })
@@ -117,6 +131,19 @@ export async function startServer(options: {
     }
     const result = await hunters.take(request, slots)
     if ("hunter" in result) sendJson(res, 201, result)
+    else sendJson(res, result.status, { error: result.error })
+  }
+
+  const reply = async (id: string, req: IncomingMessage, res: ServerResponse) => {
+    const raw = await bodyOf(req, res, "Only the map this Guslar serves may write to a hunter.")
+    if (raw === undefined) return
+    const text = parseReply(raw)
+    if (text === undefined) {
+      sendJson(res, 400, { error: "The request cannot be read: expected { text }" })
+      return
+    }
+    const result = hunters.reply(id, text)
+    if ("sent" in result) sendJson(res, 201, result)
     else sendJson(res, result.status, { error: result.error })
   }
 
@@ -128,6 +155,16 @@ export async function startServer(options: {
     if (req.url === "/api/hunters") {
       if (req.method === "POST") {
         take(req, res).catch((error: unknown) => sendJson(res, 500, { error: String(error) }))
+        return
+      }
+      res.writeHead(405, { allow: "POST" })
+      res.end()
+      return
+    }
+    const replyTo = REPLIES.exec(req.url ?? "")?.[1]
+    if (replyTo) {
+      if (req.method === "POST") {
+        reply(replyTo, req, res).catch((error: unknown) => sendJson(res, 500, { error: String(error) }))
         return
       }
       res.writeHead(405, { allow: "POST" })

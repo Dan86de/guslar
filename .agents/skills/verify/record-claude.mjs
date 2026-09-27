@@ -3,7 +3,8 @@
 // sent, in the run's claude.log, and runs until its stdin ends, as a stream-json claude does.
 // When the run has a claude-transcript.jsonl (`verify replay`), it answers its first message by
 // replaying that stream-json on stdout, line by line. A line {"replay":"wait","for":"<name>"} is
-// not sent: the replay waits there until the run has a file gates/<name>.
+// not sent: the replay waits there until the run has a file gates/<name>. A line
+// {"replay":"next"} is not sent either: the replay waits there for the next line on its stdin.
 import { appendFileSync, existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { createInterface } from "node:readline"
@@ -11,7 +12,10 @@ import { setTimeout as sleep } from "node:timers/promises"
 
 const log = (line) => appendFileSync(process.env.VERIFY_CLAUDE_LOG, `[pid ${process.pid}] ${line}\n`)
 
+let received = 0
+
 async function replay(lines, gates) {
+  let answered = 1
   for (const line of lines) {
     const entry = JSON.parse(line)
     if (entry.replay === "wait") {
@@ -19,6 +23,13 @@ async function replay(lines, gates) {
       log(`waiting at gates/${entry.for}`)
       while (!existsSync(gate)) await sleep(50)
       log(`passed gates/${entry.for}`)
+      continue
+    }
+    if (entry.replay === "next") {
+      log("waiting for the next message")
+      while (received <= answered) await sleep(50)
+      answered++
+      log("replaying on")
       continue
     }
     process.stdout.write(`${line}\n`)
@@ -37,6 +48,7 @@ const transcript = process.env.VERIFY_CLAUDE_TRANSCRIPT
 let replaying
 for await (const line of createInterface({ input: process.stdin })) {
   log(`stdin: ${line}`)
+  received++
   if (!replaying && transcript && existsSync(transcript)) {
     const lines = readFileSync(transcript, "utf8").split("\n").filter(Boolean)
     log(`replaying ${path.basename(transcript)}: ${lines.length} lines`)

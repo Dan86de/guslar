@@ -93,6 +93,7 @@ describe("sending a hunter on a ready contract", () => {
         contract: "S3",
         permissionMode: "acceptEdits",
         state: "riding-out",
+        journal: [{ kind: "you", text: "/implement-slice .scratch/slices/drain-the-bog.json S3" }],
       },
     ])
     expect(body.hunter?.id).toMatch(/^[0-9a-f-]{36}$/)

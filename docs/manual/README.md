@@ -9,6 +9,7 @@ Every spec in a region's repo is a village, and each village's notice board carr
 Each village is painted at its stage: bounty drafted, contracts posted or cleared.
 A ready contract can be taken, which sends a hunter: a `claude` session running `/implement-slice` on it, one per village at a time.
 Each hunter stands on the map beside its village in the pose of its state, and comes back with a trophy once its contract's commit lands, or wounded when its session's turn ends without one.
+Each hunter keeps a journal of its session, opened from its figure on the map, where you read it as it goes and write back to it.
 
 ## Start from a known state
 
@@ -49,4 +50,5 @@ No implementation details: only user paths, handles, commands, state and what pr
 - [See each village's stage](./village-stages.md): each village is painted as a bounty drafted, contracts posted or cleared, and the page says which.
 - [Take a contract](./take-a-contract.md): a ready contract is taken with a chosen permission mode, a hunter rides out on it, and its village refuses a second one.
 - [Follow a hunter](./follow-a-hunter.md): each hunter rides out, hunts, awaits you, and returns with a trophy or wounded, on the map, on its contract's card and in the broadcast.
+- [Talk to a hunter](./talk-to-a-hunter.md): a hunter's journal shows its session's messages and tool calls as they arrive, and sends what you type as your next message.
 - [Lose and regain the server](./reconnect.md): the map says when the server is gone and recovers by itself when it is back.

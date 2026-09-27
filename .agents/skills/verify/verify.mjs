@@ -210,6 +210,11 @@ async function accessibleName(locator) {
   return /^- button "(.*)"/.exec(snapshot)?.[1] ?? snapshot
 }
 
+async function textboxName(locator) {
+  const snapshot = await locator.ariaSnapshot()
+  return /^- textbox "(.*?)"/.exec(snapshot)?.[1] ?? snapshot
+}
+
 const DEFAULT_WORLD = {
   regions: [
     { slot: "forest", repo: "./repos/bogwater", name: "Bogwater Reach" },
@@ -502,6 +507,26 @@ const commands = {
     })
   },
 
+  async fill(flags, [name, text]) {
+    const run = runDir(flags)
+    if (!name || text === undefined) throw new Refusal("fill <accessible name of a text box> <text>")
+    return withPage(run, async (page) => {
+      const boxes = page.getByRole("textbox", { name, exact: false })
+      const count = await boxes.count()
+      if (count !== 1) {
+        out(count === 0 ? `no text box named "${name}"` : `${count} text boxes match "${name}"; name one of them fully`)
+        for (const box of await page.getByRole("textbox").all()) out(`  textbox: ${await textboxName(box)}`)
+        return 1
+      }
+      const full = await textboxName(boxes)
+      // Typed key by key, as a user does, so the page sees every keystroke.
+      await boxes.click()
+      await boxes.fill("")
+      await boxes.pressSequentially(text)
+      out(`filled text box "${full}" with: ${text}`)
+    })
+  },
+
   async press(flags, [key]) {
     const run = runDir(flags)
     if (!key) throw new Refusal("say which key: press <key>, like Escape or Tab")
@@ -615,6 +640,7 @@ const commands = {
     }
     const lines = readFileSync(source, "utf8").split("\n").filter(Boolean)
     const gates = []
+    let replies = 0
     for (const [index, line] of lines.entries()) {
       let entry
       try {
@@ -623,10 +649,12 @@ const commands = {
         throw new Refusal(`${file} line ${index + 1} is not JSON`)
       }
       if (entry.replay === "wait") gates.push(`gates/${entry.for}`)
+      if (entry.replay === "next") replies++
     }
     writeFileSync(path.join(run, "claude-transcript.jsonl"), `${lines.join("\n")}\n`)
-    out(`every claude started from now on replays ${path.relative(ROOT, source)} after its first message: ${lines.length - gates.length} lines`)
+    out(`every claude started from now on replays ${path.relative(ROOT, source)} after its first message: ${lines.length - gates.length - replies} lines`)
     out(`it waits at: ${gates.length ? gates.join(", ") : "(nowhere)"}`)
+    if (replies) out(`it waits for its next message: ${replies === 1 ? "once" : `${replies} times`}`)
   },
 
   async stop(flags) {

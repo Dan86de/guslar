@@ -3,7 +3,9 @@
 // and runs until its stdin ends, as a stream-json claude does. With FAKE_CLAUDE_TRANSCRIPT,
 // its first message is answered by replaying that stream-json transcript on stdout. A line
 // {"replay":"wait","for":"<name>"} is not sent: the replay waits there until the file
-// <name> exists in FAKE_CLAUDE_GATES, so a test can hold the hunter in a state.
+// <name> exists in FAKE_CLAUDE_GATES, so a test can hold the hunter in a state. A line
+// {"replay":"next"} is not sent either: the replay waits there for its next stdin message, as
+// a session waits for your reply once its turn is over.
 import { appendFileSync, existsSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { createInterface } from "node:readline"
@@ -11,11 +13,19 @@ import { setTimeout as sleep } from "node:timers/promises"
 
 const record = (entry) => appendFileSync(process.env.FAKE_CLAUDE_LOG, `${JSON.stringify({ pid: process.pid, ...entry })}\n`)
 
+let received = 0
+
 async function replay(transcript, gates) {
+  let answered = 1
   for (const line of readFileSync(transcript, "utf8").split("\n").filter(Boolean)) {
     const entry = JSON.parse(line)
     if (entry.replay === "wait") {
       while (gates && !existsSync(path.join(gates, entry.for))) await sleep(20)
+      continue
+    }
+    if (entry.replay === "next") {
+      while (received <= answered) await sleep(20)
+      answered++
       continue
     }
     process.stdout.write(`${line}\n`)
@@ -28,6 +38,7 @@ record({ started: { cwd: process.cwd(), args: process.argv.slice(2), hunterId: p
 let replaying
 for await (const line of createInterface({ input: process.stdin })) {
   record({ stdin: line })
+  received++
   if (!replaying && process.env.FAKE_CLAUDE_TRANSCRIPT) {
     replaying = replay(process.env.FAKE_CLAUDE_TRANSCRIPT, process.env.FAKE_CLAUDE_GATES)
   }

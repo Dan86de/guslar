@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import { createInterface } from "node:readline"
-import type { ContractState, Hunter, HunterState, SlotState, TakeRequest } from "../shared/world.js"
+import type { ContractState, Hunter, HunterState, JournalEntry, SlotState, TakeRequest } from "../shared/world.js"
 import { isReturned, refusalOf } from "../shared/world.js"
 
 /** Names handed out in order, the first one no hunter out is using. Original, from Slavic naming, none from the Witcher. */
@@ -22,6 +22,9 @@ const NAMES = [
 
 /** What a take came to: the hunter sent out, or why none was, with the HTTP status that says so. */
 export type TakeResult = { hunter: Hunter } | { status: number; error: string }
+
+/** What a reply came to: written to the hunter, or why not, with the HTTP status that says so. */
+export type ReplyResult = { sent: JournalEntry } | { status: number; error: string }
 
 /** The arguments every hunter's `claude` runs with: headless, stream-json both ways, one process across turns. */
 export function claudeArgs(permissionMode: Hunter["permissionMode"]): string[] {
@@ -50,10 +53,73 @@ type StreamMessage = {
   subtype?: unknown
   message?: { content?: unknown }
   request?: { subtype?: unknown }
+  result?: unknown
+  is_error?: unknown
 }
 
 /** The tool whose call means the session is asking you a question. */
 const ASK_TOOL = "AskUserQuestion"
+
+/** The most of one text a journal entry keeps, and of a tool call's input; longer ones are cut short. */
+const MAX_TEXT = 8000
+const MAX_INPUT = 400
+
+function clip(text: string, max: number): string {
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`
+}
+
+/** The input fields that say what a tool call is about, most telling first. */
+const GIST_FIELDS = ["command", "file_path", "path", "pattern", "url", "query", "skill", "prompt", "description"]
+
+/** The gist of a tool call's input: its questions, or the command, path or pattern it names, or else its JSON. */
+function gistOf(tool: string, input: unknown): string {
+  if (typeof input !== "object" || input === null) return ""
+  const fields = input as Record<string, unknown>
+  if (tool === ASK_TOOL && Array.isArray(fields.questions)) {
+    const questions = (fields.questions as unknown[]).flatMap((q) => {
+      const text = typeof q === "object" && q !== null ? (q as { question?: unknown }).question : undefined
+      return typeof text === "string" ? [text] : []
+    })
+    if (questions.length > 0) return clip(questions.join(" "), MAX_INPUT)
+  }
+  for (const field of GIST_FIELDS) {
+    const value = fields[field]
+    if (typeof value === "string" && value.trim() !== "") return clip(value.trim(), MAX_INPUT)
+  }
+  return clip(JSON.stringify(input), MAX_INPUT)
+}
+
+/**
+ * What one stream-json line from a hunter's claude adds to its journal: each text and tool call
+ * of an assistant message, and the result that closes a turn. Tool results, thinking and the
+ * session's own bookkeeping add nothing.
+ */
+export function journalOf(message: StreamMessage): JournalEntry[] {
+  switch (message.type) {
+    case "assistant": {
+      const content = Array.isArray(message.message?.content) ? (message.message.content as unknown[]) : []
+      return content.flatMap((block): JournalEntry[] => {
+        if (typeof block !== "object" || block === null) return []
+        const { type, text, name, input } = block as { type?: unknown; text?: unknown; name?: unknown; input?: unknown }
+        if (type === "text" && typeof text === "string" && text.trim() !== "") {
+          return [{ kind: "said", text: clip(text.trim(), MAX_TEXT) }]
+        }
+        if (type === "tool_use" && typeof name === "string") return [{ kind: "tool", tool: name, input: gistOf(name, input) }]
+        return []
+      })
+    }
+    case "result":
+      return [
+        {
+          kind: "result",
+          text: typeof message.result === "string" ? clip(message.result.trim(), MAX_TEXT) : "",
+          error: message.is_error === true || message.subtype !== "success",
+        },
+      ]
+    default:
+      return []
+  }
+}
 
 /**
  * What one stream-json line from a hunter's claude does to its state, or `"turn-ended"` for
@@ -151,6 +217,7 @@ export class Hunters {
 
     // A hunter back in this village makes way for the new one, and its name is free again.
     for (const returned of inVillage) this.dismiss(returned.id)
+    const opening = `/implement-slice ${village.slices} ${contract.id}`
     const hunter: Hunter = {
       id,
       name: this.freeName(),
@@ -159,6 +226,7 @@ export class Hunters {
       contract: contract.id,
       permissionMode: request.permissionMode,
       state: "riding-out",
+      journal: [{ kind: "you", text: opening }],
     }
 
     const lines = createInterface({ input: child.stdout, crlfDelay: Infinity })
@@ -177,10 +245,24 @@ export class Hunters {
       this.changed()
     })
 
-    child.stdin.write(userMessage(`/implement-slice ${village.slices} ${contract.id}`))
+    child.stdin.write(userMessage(opening))
     this.out.set(hunter.id, { hunter, process: child })
     this.changed()
     return { hunter }
+  }
+
+  /** Writes what you typed in a hunter's journal to its session, as the next user message. */
+  reply(id: string, text: string): ReplyResult {
+    const entry = this.out.get(id)
+    if (!entry) return { status: 404, error: "No such hunter is out." }
+    const trimmed = text.trim()
+    if (trimmed === "") return { status: 400, error: "A reply needs words." }
+    if (!entry.process.stdin.writable) return { status: 409, error: `${entry.hunter.name} no longer listens.` }
+    entry.process.stdin.write(userMessage(trimmed))
+    const sent: JournalEntry = { kind: "you", text: trimmed }
+    entry.hunter.journal.push(sent)
+    this.changed()
+    return { sent }
   }
 
   /**
@@ -214,12 +296,15 @@ export class Hunters {
       return // not stream-json: claude says nothing to the map outside it
     }
     if (typeof message !== "object" || message === null) return
+    const written = journalOf(message)
+    entry.hunter.journal.push(...written)
     const next = afterMessage(entry.hunter.state, message)
     if (next === "turn-ended") {
+      if (written.length > 0) this.changed()
       void this.cameBack(id)
       return
     }
-    this.move(id, next)
+    if (!this.move(id, next) && written.length > 0) this.changed()
   }
 
   /**
@@ -238,11 +323,13 @@ export class Hunters {
     this.move(id, paid(state) ? "returned-trophy" : "returned-wounded")
   }
 
-  private move(id: string, state: HunterState): void {
+  /** Moves a hunter to a new state and says so to the map; returns whether it moved. */
+  private move(id: string, state: HunterState): boolean {
     const hunter = this.out.get(id)?.hunter
-    if (!hunter || hunter.state === state || hunter.state === "returned-trophy") return
+    if (!hunter || hunter.state === state || hunter.state === "returned-trophy") return false
     hunter.state = state
     this.changed()
+    return true
   }
 
   /** Sends a returned hunter home: it leaves the map now, and its claude exits once its stdin ends. */

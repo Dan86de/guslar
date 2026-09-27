@@ -10,10 +10,11 @@ import bountyUrl from "../../art/village-bounty.png"
 import clearedUrl from "../../art/village-cleared.png"
 import contractsUrl from "../../art/village-contracts.png"
 import mapUrl from "../../art/world-map.png"
-import type { HunterState, RegionSlot, VillageStage, WorldState } from "../shared/world.js"
+import type { RegionSlot, VillageStage, WorldState } from "../shared/world.js"
 import { cutOutAll } from "./cutout.js"
 import { featheredMap, FogLayer } from "./fog.js"
 import { fitMap, hunterGround, labelAnchor, MAP_SIZE, villageSpots, type View } from "./geometry.js"
+import { HUNTER_STATE_NAMES } from "./hunterStates.js"
 import { HunterLayer, isOut, POSES, RIDE_MS, type HunterPlace, type Pose } from "./hunters.js"
 
 /** What the map needs from the Pixi scene once it is built. */
@@ -44,15 +45,6 @@ const POSE_ART: Record<Pose, string> = {
   hunting: huntingUrl,
   wounded: woundedUrl,
   trophy: trophyUrl,
-}
-
-/** A hunter's state as its list item says it. */
-const HUNTER_STATE_NAMES: Record<HunterState, string> = {
-  "riding-out": "riding out",
-  hunting: "hunting",
-  "awaiting-you": "awaiting you",
-  "returned-trophy": "returned with a trophy",
-  "returned-wounded": "returned wounded",
 }
 
 /** Where every hunter in the world stands on the map: beside its village, out in the field or back home. */
@@ -87,9 +79,12 @@ function slotName(slot: RegionSlot): string {
 export function WorldMap({
   world,
   onOpenVillage,
+  onOpenHunter,
 }: {
   world: WorldState | undefined
   onOpenVillage: (village: VillageRef) => void
+  /** Opens a hunter's journal, by the hunter's id. */
+  onOpenHunter: (id: string) => void
 }) {
   const host = useRef<HTMLDivElement>(null)
   const [scene, setScene] = useState<Scene>()
@@ -246,7 +241,7 @@ export function WorldMap({
             })}
           </ul>
           <VillageList world={world} view={view} aspect={scene.villageAspect} onOpen={onOpenVillage} />
-          <HunterList world={world} view={view} aspect={scene.villageAspect} />
+          <HunterList world={world} view={view} aspect={scene.villageAspect} onOpen={onOpenHunter} />
         </>
       )}
     </div>
@@ -302,9 +297,20 @@ function VillageList({
 
 /**
  * Each hunter's name over its painted figure's head, following it as it rides, with its state and
- * contract said in words for anyone who cannot see the pose.
+ * contract said in words for anyone who cannot see the pose. The name and the figure under it
+ * are one button, named by the hunter, which opens its journal.
  */
-function HunterList({ world, view, aspect }: { world: WorldState; view: View; aspect: number }) {
+function HunterList({
+  world,
+  view,
+  aspect,
+  onOpen,
+}: {
+  world: WorldState
+  view: View
+  aspect: number
+  onOpen: (id: string) => void
+}) {
   const places = hunterPlaces(world, aspect)
   if (places.length === 0) return null
   return (
@@ -316,11 +322,20 @@ function HunterList({ world, view, aspect }: { world: WorldState; view: View; as
           left: view.x + at.x * view.scale,
           top: view.y + (at.y - height) * view.scale,
           transitionDuration: `${RIDE_MS}ms`,
+          "--figure-height": `${height * view.scale}px`,
         }
         return (
           <li key={hunter.id} className="hunter" style={style} data-state={hunter.state}>
-            <span className="hunter-name">{hunter.name}</span>
-            <span className="visually-hidden">
+            {/* Named by the hunter alone, so a village's name opens only its village. */}
+            <button
+              type="button"
+              className="hunter-open"
+              aria-describedby={`hunter-${hunter.id}`}
+              onClick={() => onOpen(hunter.id)}
+            >
+              <span className="hunter-name">{hunter.name}</span>
+            </button>
+            <span id={`hunter-${hunter.id}`} className="visually-hidden">
               {` , ${HUNTER_STATE_NAMES[hunter.state]} on ${hunter.contract} of ${village?.title ?? hunter.village}`}
             </span>
           </li>
