@@ -1,10 +1,12 @@
 import { Application, BlurFilter, CanvasSource, ColorMatrixFilter, Container, Sprite, Texture } from "pixi.js"
 import { useEffect, useRef, useState } from "react"
 import fogUrl from "../../art/fog.png"
-import villageUrl from "../../art/village-bounty.png"
+import bountyUrl from "../../art/village-bounty.png"
+import clearedUrl from "../../art/village-cleared.png"
+import contractsUrl from "../../art/village-contracts.png"
 import mapUrl from "../../art/world-map.png"
-import type { RegionSlot, WorldState } from "../shared/world.js"
-import { cutOut } from "./cutout.js"
+import type { RegionSlot, VillageStage, WorldState } from "../shared/world.js"
+import { cutOutAll } from "./cutout.js"
 import { featheredMap, FogLayer } from "./fog.js"
 import { fitMap, labelAnchor, MAP_SIZE, villageSpots, type View } from "./geometry.js"
 
@@ -14,6 +16,22 @@ type Scene = {
   /** The village art's height over its width. */
   villageAspect: number
 }
+
+/** Each village stage's art, painted from one camera so they swap in place. */
+const STAGE_ART: Record<VillageStage, string> = {
+  "bounty-drafted": bountyUrl,
+  "contracts-posted": contractsUrl,
+  cleared: clearedUrl,
+}
+
+/** A village's stage as its list item says it. */
+const STAGE_NAMES: Record<VillageStage, string> = {
+  "bounty-drafted": "Bounty drafted",
+  "contracts-posted": "Contracts posted",
+  cleared: "Cleared",
+}
+
+const STAGES = Object.keys(STAGE_ART) as VillageStage[]
 
 /** A village the user opened: its region's slot and the spec's slug. */
 export type VillageRef = { slot: RegionSlot; slug: string }
@@ -50,7 +68,7 @@ export function WorldMap({
     let onResize: (() => void) | undefined
 
     void (async () => {
-      const [, mapImage, fogImage, villageImage] = await Promise.all([
+      const [, mapImage, fogImage, ...stageImages] = await Promise.all([
         app.init({
           resizeTo: element,
           background: "#1d1812",
@@ -60,7 +78,7 @@ export function WorldMap({
         }),
         loadImage(mapUrl),
         loadImage(fogUrl),
-        loadImage(villageUrl),
+        ...STAGES.map((stage) => loadImage(STAGE_ART[stage])),
       ])
       if (life.cancelled) {
         app.destroy(true)
@@ -84,10 +102,19 @@ export function WorldMap({
 
       // Villages stand on the map, under the fog, which never covers a claimed region anyway.
       // Drawn far smaller than painted, so it needs mipmaps or its ink lines break into pixels.
-      const villageTexture = new Texture({
-        source: new CanvasSource({ resource: cutOut(villageImage), autoGenerateMipmaps: true, scaleMode: "linear" }),
-      })
-      const villageAspect = villageTexture.height / villageTexture.width
+      // Every stage is cut to the same box, so they share one aspect.
+      const cutouts = cutOutAll(stageImages)
+      const stageTextures = new Map(
+        STAGES.map((stage, index) => [
+          stage,
+          new Texture({
+            source: new CanvasSource({ resource: cutouts[index], autoGenerateMipmaps: true, scaleMode: "linear" }),
+          }),
+        ]),
+      )
+      const firstCutout = cutouts[0]
+      if (!firstCutout) throw new Error("no village art")
+      const villageAspect = firstCutout.height / firstCutout.width
       const villages = new Container()
       board.addChild(villages)
 
@@ -120,8 +147,11 @@ export function WorldMap({
           for (const child of villages.removeChildren()) child.destroy()
           for (const slot of world.slots) {
             if (slot.kind !== "region") continue
-            for (const spot of villageSpots(slot.slot, slot.villages.length, villageAspect)) {
-              const sprite = new Sprite(villageTexture)
+            const spots = villageSpots(slot.slot, slot.villages.length, villageAspect)
+            for (const [index, village] of slot.villages.entries()) {
+              const spot = spots[index]
+              if (!spot) continue
+              const sprite = new Sprite(stageTextures.get(village.stage))
               sprite.anchor.set(0.5)
               sprite.position.set(spot.x, spot.y)
               sprite.width = spot.width
@@ -177,7 +207,10 @@ export function WorldMap({
   )
 }
 
-/** What a user clicks to open a village: one button over each village's art, with its name under it. */
+/**
+ * What a user clicks to open a village: one button over each village's art, with its name
+ * under it, and the stage the art paints said in words beside it.
+ */
 function VillageList({
   world,
   view,
@@ -208,6 +241,7 @@ function VillageList({
             <span className="village-name">{village.title}</span>
             <span className="visually-hidden">{`, village in ${slot.name}`}</span>
           </button>
+          <span className="visually-hidden">{STAGE_NAMES[village.stage]}</span>
         </li>,
       ]
     })

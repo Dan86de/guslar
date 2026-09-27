@@ -112,6 +112,7 @@ Handles to use:
   A region item reads `<name> , <slot name>` and a fogged one `Unclaimed <slot name>, under fog`, where the slot name is the slot with its hyphen as a space (`river town`).
   When the server is gone there is a status `The road to the server is cut. Reconnecting…`.
 - The list named `Villages`, after `Regions`: one item per spec, region by region in slot order, each a button named `<village title> , village in <region name>`.
+  Beside its button, each item has the village's stage as text: `Bounty drafted`, `Contracts posted` or `Cleared`.
 - An opened village is a dialog named `Notice board of <village title>`, with a button `Close the notice board` and a list `Contracts` whose items read `<id> <afk|hitl> <title> <state>`, the state being `Done`, `Pending`, `Ready` or `Sealed by <ids>`.
 - On the CLI: the lines `Guslar reads <file> (<n> regions)` and `Guslar is listening on <url>`, and refusals starting `guslar: `.
 

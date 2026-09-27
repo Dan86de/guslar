@@ -1,11 +1,42 @@
+/** A part of an image, in its pixels. */
+type Box = { left: number; top: number; right: number; bottom: number }
+
 /**
- * Lifts a painted prop off its flat parchment background: the background colour is read
- * from the image's border, and everything of that colour reachable from the border turns
+ * Lifts painted props off their flat parchment background: the background colour is read
+ * from each image's border, and everything of that colour reachable from the border turns
  * transparent, fading over a band of near colours so the ink edge stays soft. Parchment
- * inside the prop, like a notice nailed to a post, is enclosed and stays. The result is
- * cropped to what is left.
+ * inside a prop, like a notice nailed to a post, is enclosed and stays.
+ *
+ * The images are paintings of one prop from the same camera, like a village at each of its
+ * stages, so they are all cropped to one box around what is left of any of them: one drawn
+ * in place of another stands exactly where it did.
  */
-export function cutOut(image: HTMLImageElement, near = 22, far = 70): HTMLCanvasElement {
+export function cutOutAll(images: HTMLImageElement[], near = 22, far = 70): HTMLCanvasElement[] {
+  const lifted = images.map((image) => lift(image, near, far))
+  const boxes = lifted.flatMap(({ box }) => (box ? [box] : []))
+  const union =
+    boxes.length === 0
+      ? undefined
+      : {
+          left: Math.min(...boxes.map((b) => b.left)),
+          top: Math.min(...boxes.map((b) => b.top)),
+          right: Math.max(...boxes.map((b) => b.right)),
+          bottom: Math.max(...boxes.map((b) => b.bottom)),
+        }
+  return lifted.map(({ canvas }) => crop(canvas, union))
+}
+
+function crop(source: HTMLCanvasElement, box: Box | undefined): HTMLCanvasElement {
+  if (!box) return source
+  const cropped = document.createElement("canvas")
+  cropped.width = box.right - box.left + 1
+  cropped.height = box.bottom - box.top + 1
+  cropped.getContext("2d")?.drawImage(source, -box.left, -box.top)
+  return cropped
+}
+
+/** The image with its background taken out, and the box of what still shows, if anything does. */
+function lift(image: HTMLImageElement, near: number, far: number): { canvas: HTMLCanvasElement; box?: Box } {
   const width = image.naturalWidth
   const height = image.naturalHeight
   const source = document.createElement("canvas")
@@ -63,7 +94,7 @@ export function cutOut(image: HTMLImageElement, near = 22, far = 70): HTMLCanvas
   }
   ctx.putImageData(pixels, 0, 0)
 
-  // Crop to the pixels that still show.
+  // The box of the pixels that still show.
   let left = width
   let right = -1
   let top = height
@@ -77,12 +108,8 @@ export function cutOut(image: HTMLImageElement, near = 22, far = 70): HTMLCanvas
       bottom = Math.max(bottom, y)
     }
   }
-  if (right < left) return source
-  const cropped = document.createElement("canvas")
-  cropped.width = right - left + 1
-  cropped.height = bottom - top + 1
-  cropped.getContext("2d")?.drawImage(source, -left, -top)
-  return cropped
+  if (right < left) return { canvas: source }
+  return { canvas: source, box: { left, top, right, bottom } }
 }
 
 function median(values: number[]): number {

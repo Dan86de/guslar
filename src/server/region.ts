@@ -2,7 +2,7 @@ import { execFile } from "node:child_process"
 import { readdir, readFile } from "node:fs/promises"
 import path from "node:path"
 import { promisify } from "node:util"
-import type { Autonomy, Contract, Village } from "../shared/world.js"
+import type { Autonomy, Contract, Village, VillageStage } from "../shared/world.js"
 
 const run = promisify(execFile)
 
@@ -35,12 +35,13 @@ export class RegionReader {
     const slug = file.slice(0, -".md".length)
     const spec = path.join(SPECS, file)
     const title = headingOf(await readFile(path.join(this.repo, spec), "utf8")) ?? slug
-    const village: Village = { slug, title, spec, contracts: [] }
+    const village: Village = { slug, title, stage: "bounty-drafted", spec, contracts: [] }
 
     const slices = path.join(SLICES, `${slug}.json`)
     const text = await readOptional(path.join(this.repo, slices))
     if (text === undefined) return village
     village.slices = slices
+    village.stage = "contracts-posted"
 
     let plan: SlicesFile
     try {
@@ -53,6 +54,7 @@ export class RegionReader {
     const tip = branches.get(slug)
     const trailers = tip ? await this.trailersOf(slug, tip, plan.commit) : NO_TRAILERS
     village.contracts = plan.slices.map((slice) => contractOf(slice, trailers))
+    village.stage = stageOf(village.contracts)
     return village
   }
 
@@ -112,6 +114,11 @@ function contractOf(slice: SliceEntry, trailers: Trailers): Contract {
   // A pending blocker does not unblock anything: only done ones do.
   const sealedBy = slice.blocked_by.filter((id) => !trailers.done.has(id))
   return sealedBy.length === 0 ? { ...contract, state: "ready" } : { ...contract, state: "sealed", sealedBy }
+}
+
+/** A board with contracts is cleared once every one of them is done; an empty board is not. */
+function stageOf(contracts: Contract[]): VillageStage {
+  return contracts.length > 0 && contracts.every((c) => c.state === "done") ? "cleared" : "contracts-posted"
 }
 
 type SliceEntry = { id: string; title: string; autonomy: Autonomy; blocked_by: string[] }

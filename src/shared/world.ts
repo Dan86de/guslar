@@ -24,11 +24,18 @@ export type Contract = {
   sealedBy?: string[]
 }
 
+/**
+ * How far a village's spec has come: `bounty-drafted` has a spec and no slices file,
+ * `contracts-posted` has a slices file, and `cleared` has every one of its contracts done.
+ */
+export type VillageStage = "bounty-drafted" | "contracts-posted" | "cleared"
+
 /** One spec in a region's `.scratch/specs/`. */
 export type Village = {
   slug: string
   /** The spec's first `# ` heading, or its slug when it has none. */
   title: string
+  stage: VillageStage
   /** The spec, relative to the repo. */
   spec: string
   /** The slices file, relative to the repo, when there is one. */
