@@ -99,7 +99,18 @@ export type Hunter = {
   journal: JournalEntry[]
   /** The last event its session's hooks posted, once one has. */
   lastHook?: HookSighting
+  /** The permission its session is waiting on you for, oldest first, while one is. */
+  prompt?: PermissionPrompt
 }
+
+/**
+ * A permission a hunter's session asks for through its `PermissionRequest` hook: the tool and
+ * the input it would run with, long strings cut short. It waits until you allow or deny it.
+ */
+export type PermissionPrompt = { id: string; tool: string; input: Record<string, unknown> }
+
+/** Your answer to a permission prompt; a denial may carry words for the session. */
+export type PermissionAnswer = { behavior: "allow" } | { behavior: "deny"; message?: string }
 
 /** A hook event as the map sees it: which event, and the tool it is about, if any. */
 export type HookSighting = { event: string; tool?: string }
@@ -121,6 +132,9 @@ export type HookRequest = {
   hunterId?: string
   input: { hook_event_name?: unknown; tool_name?: unknown; session_id?: unknown } & Record<string, unknown>
 }
+
+/** What Guslar answers the hook on a `PermissionRequest`: your decision, or none when there is none to give. */
+export type HookReply = { heard: boolean; decision?: PermissionAnswer }
 
 /** A village takes one hunter at a time; this is what it says to a second one. */
 export function refusalOf(village: Pick<Village, "title">, holder: Pick<Hunter, "name" | "contract">): string {

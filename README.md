@@ -70,6 +70,10 @@ Guslar hears what each hunter's session does through Claude Code hooks.
 `hooks install` adds them to `.claude/settings.local.json` in every repo of your world, after any hooks you already have, and keeps that file out of `git status`.
 `npx guslar hooks remove` takes them out again and leaves the file as you wrote it.
 
+With the hooks in, a hunter that asks permission for a tool pins a petition to the map: allow it, or deny it with a reason the session reads.
+The hook waits up to five minutes for your answer.
+If the hunter cannot reach Guslar at all, its hook allows the request, so a hunter is never stranded by a Guslar that has stopped.
+
 ## Options
 
 - `--world <file>`: the world to read.

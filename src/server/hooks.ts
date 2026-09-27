@@ -23,6 +23,12 @@ export const HOOK_EVENTS = [
 /** How long Claude Code lets Guslar's hook run, in seconds; it posts one event and is done. */
 const HOOK_TIMEOUT = 10
 
+/**
+ * How long a permission request waits for your answer on the map, in seconds. Past it, Claude
+ * Code gives up on the hook and the hunter has to ask again.
+ */
+const PERMISSION_TIMEOUT = 300
+
 /** The file the hook runs, and how Guslar tells its own hooks from everyone else's. */
 const HOOK_SCRIPT = "guslar-hook.js"
 
@@ -131,7 +137,8 @@ function withGuslar(settings: Settings, command: string): void {
   withoutGuslar(settings)
   const hooks = (settings.hooks ??= {})
   for (const event of HOOK_EVENTS) {
-    const hook: HookCommand = { type: "command", command, timeout: HOOK_TIMEOUT }
+    const timeout = event === "PermissionRequest" ? PERMISSION_TIMEOUT : HOOK_TIMEOUT
+    const hook: HookCommand = { type: "command", command, timeout }
     ;(hooks[event] ??= []).push({ hooks: [hook] })
   }
 }

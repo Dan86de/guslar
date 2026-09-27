@@ -870,3 +870,180 @@ main {
 .entry-colon {
   font-size: 0;
 }
+
+/* Petitions: a hunter's permission request, pinned down the map's left edge in the rust of awaiting you. */
+
+.petitions {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  display: grid;
+  gap: 12px;
+  width: min(400px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: hidden auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bog) transparent;
+}
+
+.petition {
+  position: relative;
+  padding: 16px 20px 16px;
+  color: var(--ink);
+  font-size: 16px;
+  background: var(--bone);
+  border: 1.5px solid var(--rust);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 0 0 4px var(--bone),
+    inset 0 0 0 5px rgb(138 59 42 / 0.5),
+    4px 8px 18px rgb(0 0 0 / 0.55);
+}
+
+/* The hunter's own pennant, planted at the petition's corner. */
+.petition-flare {
+  position: absolute;
+  right: 14px;
+  top: 10px;
+  width: 26px;
+  aspect-ratio: 286 / 512;
+  background: url("../../art/awaiting-flare.png") center / contain no-repeat;
+  transform: rotate(8deg);
+}
+
+.petition-heading {
+  margin: 0;
+  padding-right: 36px;
+  font-size: 24px;
+  font-weight: normal;
+  line-height: 1.15;
+}
+
+.petition-asks {
+  color: rgb(36 28 20 / 0.72);
+  font-size: 19px;
+  font-style: italic;
+}
+
+.petition-tool {
+  color: var(--rust);
+}
+
+.petition-bound {
+  margin: 4px 0 0;
+  padding-right: 36px;
+  font-size: 16px;
+  font-style: italic;
+  line-height: 1.25;
+}
+
+.petition-description {
+  margin: 12px 0 0;
+  line-height: 1.3;
+}
+
+.petition-input {
+  display: grid;
+  gap: 6px;
+  max-height: 240px;
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  overflow: hidden auto;
+  background: rgb(36 28 20 / 0.08);
+  border-left: 3px solid var(--rust);
+  scrollbar-width: thin;
+  scrollbar-color: var(--bog) transparent;
+}
+
+.petition-field dt {
+  color: rgb(36 28 20 / 0.62);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.petition-field dd {
+  margin: 0;
+}
+
+.petition-field code {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.petition-answer {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.petition-reason {
+  min-width: 0;
+  padding: 7px 10px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  background: rgb(255 250 235 / 0.45);
+  border: 1px solid rgb(36 28 20 / 0.55);
+  border-radius: 2px;
+}
+
+.petition-reason::placeholder {
+  color: rgb(36 28 20 / 0.5);
+  font-style: italic;
+}
+
+.petition-reason:focus {
+  background: rgb(255 250 235 / 0.7);
+  border-color: var(--rust);
+  outline: 1px solid var(--rust);
+}
+
+.petition-allow,
+.petition-deny {
+  padding: 0.3em 1em 0.4em;
+  font: inherit;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.petition-allow {
+  color: var(--bone);
+  background: var(--ink);
+  border: 1px solid var(--ink);
+}
+
+.petition-deny {
+  color: var(--rust);
+  background: none;
+  border: 1px solid var(--rust);
+}
+
+.petition-allow:hover:not(:disabled),
+.petition-allow:focus-visible,
+.petition-deny:hover:not(:disabled),
+.petition-deny:focus-visible {
+  color: var(--bone);
+  background: var(--rust);
+  border-color: var(--rust);
+  outline: none;
+}
+
+.petition-allow:disabled,
+.petition-deny:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.petition-problem {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 6px 10px;
+  color: var(--rust);
+  border-left: 3px solid var(--rust);
+}

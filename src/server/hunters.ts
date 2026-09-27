@@ -8,6 +8,8 @@ import type {
   Hunter,
   HunterState,
   JournalEntry,
+  PermissionAnswer,
+  PermissionPrompt,
   SlotState,
   TakeRequest,
 } from "../shared/world.js"
@@ -34,6 +36,36 @@ export type TakeResult = { hunter: Hunter } | { status: number; error: string }
 
 /** What a reply came to: written to the hunter, or why not, with the HTTP status that says so. */
 export type ReplyResult = { sent: JournalEntry } | { status: number; error: string }
+
+/** What an answer to a prompt came to: given to the waiting hook, or why not, with the HTTP status that says so. */
+export type AnswerResult = { answered: PermissionPrompt } | { status: number; error: string }
+
+/**
+ * A permission request its hunter's hook is waiting on: `decision` settles with your answer, or
+ * with none when the prompt goes unanswered (the hook gave up, or the hunter left the map), and
+ * `withdraw` takes it back when the hook is no longer there to hear the answer.
+ */
+export type Asking = { decision: Promise<PermissionAnswer | undefined>; withdraw(): void }
+
+type Pending = { prompt: PermissionPrompt; settle: (answer: PermissionAnswer | undefined) => void }
+
+/** The longest string of a tool's input a prompt shows; a Write's whole file would swamp the map. */
+const MAX_PROMPT_STRING = 4000
+
+/** A tool's input as a prompt shows it: every string in it cut to MAX_PROMPT_STRING. */
+function promptInput(input: unknown): Record<string, unknown> {
+  const clipDeep = (value: unknown): unknown => {
+    if (typeof value === "string") return clip(value, MAX_PROMPT_STRING)
+    if (Array.isArray(value)) return value.map(clipDeep)
+    if (typeof value === "object" && value !== null) {
+      return Object.fromEntries(Object.entries(value).map(([key, field]) => [key, clipDeep(field)]))
+    }
+    return value
+  }
+  return typeof input === "object" && input !== null && !Array.isArray(input)
+    ? (clipDeep(input) as Record<string, unknown>)
+    : {}
+}
 
 /** The arguments every hunter's `claude` runs with: headless, stream-json both ways, one process across turns. */
 export function claudeArgs(permissionMode: Hunter["permissionMode"]): string[] {
@@ -173,7 +205,10 @@ function userMessage(text: string): string {
  * holds it. A hunter stays on the map while its process runs.
  */
 export class Hunters {
-  private readonly out = new Map<string, { hunter: Hunter; process: ChildProcessWithoutNullStreams }>()
+  private readonly out = new Map<
+    string,
+    { hunter: Hunter; process: ChildProcessWithoutNullStreams; asking: Pending[] }
+  >()
   private readonly listeners = new Set<() => void>()
   /** Where this Guslar listens, given to each hunter as `GUSLAR_URL` so its hooks can reach it. */
   private url: string | undefined
@@ -251,6 +286,7 @@ export class Hunters {
     child.stderr.on("data", (chunk: Buffer) => (stderr = (stderr + chunk.toString()).slice(-2000)))
     child.stdin.on("error", () => {}) // a claude that exits early closes its stdin under us
     child.once("exit", (code, signal) => {
+      this.release(hunter.id)
       this.out.delete(hunter.id)
       if (code !== 0 && code !== null) {
         const last = stderr.trim().split("\n").pop()
@@ -262,7 +298,7 @@ export class Hunters {
     })
 
     child.stdin.write(userMessage(opening))
-    this.out.set(hunter.id, { hunter, process: child })
+    this.out.set(hunter.id, { hunter, process: child, asking: [] })
     this.changed()
     return { hunter }
   }
@@ -294,6 +330,67 @@ export class Hunters {
     entry.hunter.lastHook = sighting
     this.changed()
     return true
+  }
+
+  /**
+   * Takes a `PermissionRequest` its hunter's hook posted and holds it as a prompt, putting the
+   * hunter in awaiting you until you answer. Undefined when it names no hunter out, whose hook
+   * gets no decision from Guslar.
+   */
+  asked(request: HookRequest): Asking | undefined {
+    const id = request.hunterId
+    const entry = id ? this.out.get(id) : undefined
+    const tool = request.input.tool_name
+    if (!id || !entry || typeof tool !== "string" || tool === "") return undefined
+    entry.hunter.lastHook = { event: "PermissionRequest", tool }
+    const prompt: PermissionPrompt = { id: randomUUID(), tool, input: promptInput(request.input.tool_input) }
+    const decision = new Promise<PermissionAnswer | undefined>((settle) => entry.asking.push({ prompt, settle }))
+    this.showPrompt(id)
+    this.changed()
+    return { decision, withdraw: () => this.settle(id, prompt.id, undefined) }
+  }
+
+  /** Gives your answer to a hunter's prompt to the hook waiting on it. */
+  answer(id: string, promptId: string, answer: PermissionAnswer): AnswerResult {
+    const entry = this.out.get(id)
+    if (!entry) return { status: 404, error: "No such hunter is out." }
+    const pending = entry.asking.find((p) => p.prompt.id === promptId)
+    if (!pending) return { status: 409, error: `${entry.hunter.name} is no longer waiting on that.` }
+    this.settle(id, promptId, answer)
+    return { answered: pending.prompt }
+  }
+
+  /** Settles one prompt of a hunter; once none is left, the hunter goes back to its hunt. */
+  private settle(id: string, promptId: string, answer: PermissionAnswer | undefined): void {
+    const entry = this.out.get(id)
+    const index = entry?.asking.findIndex((p) => p.prompt.id === promptId) ?? -1
+    if (!entry || index < 0) return
+    const [pending] = entry.asking.splice(index, 1)
+    pending?.settle(answer)
+    this.showPrompt(id)
+    if (!entry.hunter.prompt && entry.hunter.state === "awaiting-you") entry.hunter.state = "hunting"
+    this.changed()
+  }
+
+  /** Shows a hunter's oldest prompt, awaiting you, or none. */
+  private showPrompt(id: string): void {
+    const entry = this.out.get(id)
+    if (!entry) return
+    const oldest = entry.asking[0]?.prompt
+    if (oldest) {
+      entry.hunter.prompt = oldest
+      if (!isReturned(entry.hunter)) entry.hunter.state = "awaiting-you"
+    } else {
+      delete entry.hunter.prompt
+    }
+  }
+
+  /** Lets go every prompt a hunter holds, unanswered, so no hook waits on a hunter that is gone. */
+  private release(id: string): void {
+    const entry = this.out.get(id)
+    if (!entry) return
+    for (const pending of entry.asking.splice(0)) pending.settle(undefined)
+    delete entry.hunter.prompt
   }
 
   /**
@@ -358,6 +455,8 @@ export class Hunters {
   private move(id: string, state: HunterState): boolean {
     const hunter = this.out.get(id)?.hunter
     if (!hunter || hunter.state === state || hunter.state === "returned-trophy") return false
+    // A hunter with a prompt out waits on you, whatever else its session says meanwhile.
+    if (hunter.prompt && state === "hunting") return false
     hunter.state = state
     this.changed()
     return true
@@ -367,13 +466,17 @@ export class Hunters {
   private dismiss(id: string): void {
     const entry = this.out.get(id)
     if (!entry) return
+    this.release(id)
     this.out.delete(id)
     entry.process.stdin.end()
   }
 
   /** Lets every hunter go: its stdin ends, so its claude finishes the turn it is on and exits. */
   close(): void {
-    for (const { process } of this.out.values()) process.stdin.end()
+    for (const [id, { process }] of this.out) {
+      this.release(id)
+      process.stdin.end()
+    }
   }
 
   private freeName(): string {

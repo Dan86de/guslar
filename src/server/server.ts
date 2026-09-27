@@ -6,9 +6,11 @@ import { fileURLToPath } from "node:url"
 import sirv from "sirv"
 import { WebSocketServer, type WebSocket } from "ws"
 import {
+  type HookReply,
   type HookRequest,
   isPermissionMode,
   isRegionSlot,
+  type PermissionAnswer,
   type ServerMessage,
   type SlotState,
   type TakeRequest,
@@ -26,8 +28,17 @@ export type GuslarServer = {
 /** The largest request body the server reads: a take is a few hundred bytes, a reply a few pages at most. */
 const MAX_BODY = 64 * 1024
 
+/**
+ * The largest hook event the server reads. A permission request carries the tool's whole input,
+ * a Write's file included, and one refused for its size would leave the hunter without an answer.
+ */
+const MAX_HOOK_BODY = 16 * 1024 * 1024
+
 /** Where a map writes to one hunter: `/api/hunters/<id>/replies`. */
 const REPLIES = /^\/api\/hunters\/([0-9a-f-]{36})\/replies$/
+
+/** Where a map answers one hunter's prompt: `/api/hunters/<id>/prompts/<prompt id>`. */
+const PROMPTS = /^\/api\/hunters\/([0-9a-f-]{36})\/prompts\/([0-9a-f-]{36})$/
 
 /** The built map lives in dist/client, next to this file's dist/server. */
 function clientDir(): string {
@@ -45,13 +56,13 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body))
 }
 
-function readBody(req: IncomingMessage): Promise<string> {
+function readBody(req: IncomingMessage, max: number): Promise<string> {
   return new Promise((resolve, reject) => {
     let body = ""
     req.setEncoding("utf8")
     req.on("data", (chunk: string) => {
       body += chunk
-      if (body.length > MAX_BODY) reject(new Error("the request is too large"))
+      if (body.length > max) reject(new Error("the request is too large"))
     })
     req.once("end", () => resolve(body))
     req.once("error", reject)
@@ -74,6 +85,16 @@ function parseHook(raw: unknown): HookRequest | undefined {
   if (hunterId !== undefined && typeof hunterId !== "string") return undefined
   if (typeof input !== "object" || input === null || Array.isArray(input)) return undefined
   return { hunterId, input: input as HookRequest["input"] }
+}
+
+function parseAnswer(raw: unknown): PermissionAnswer | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined
+  const { behavior, message } = raw as Record<string, unknown>
+  if (behavior === "allow") return { behavior }
+  if (behavior !== "deny") return undefined
+  if (message === undefined) return { behavior }
+  if (typeof message !== "string") return undefined
+  return message.trim() === "" ? { behavior } : { behavior, message: message.trim() }
 }
 
 function parseReply(raw: unknown): string | undefined {
@@ -118,13 +139,13 @@ export async function startServer(options: {
   }
 
   /** The JSON a request from the map carries, or undefined once it has been answered with why not. */
-  const bodyOf = async (req: IncomingMessage, res: ServerResponse, forbidden: string): Promise<unknown> => {
+  const bodyOf = async (req: IncomingMessage, res: ServerResponse, forbidden: string, max = MAX_BODY): Promise<unknown> => {
     if (!fromOwnMap(req)) {
       sendJson(res, 403, { error: forbidden })
       return undefined
     }
     try {
-      return JSON.parse(await readBody(req)) as unknown
+      return JSON.parse(await readBody(req, max)) as unknown
     } catch (error) {
       sendJson(res, 400, { error: `The request cannot be read: ${(error as Error).message}` })
       return undefined
@@ -157,15 +178,45 @@ export async function startServer(options: {
     else sendJson(res, result.status, { error: result.error })
   }
 
+  const answer = async (id: string, promptId: string, req: IncomingMessage, res: ServerResponse) => {
+    const raw = await bodyOf(req, res, "Only the map this Guslar serves may answer a hunter.")
+    if (raw === undefined) return
+    const decision = parseAnswer(raw)
+    if (!decision) {
+      sendJson(res, 400, { error: 'The request cannot be read: expected { behavior: "allow" } or { behavior: "deny", message? }' })
+      return
+    }
+    const result = hunters.answer(id, promptId, decision)
+    if ("answered" in result) sendJson(res, 200, result)
+    else sendJson(res, result.status, { error: result.error })
+  }
+
+  /**
+   * A hook event from a session. A permission request from a hunter is held open until you
+   * answer it on the map, and its hook gets your decision; if the hook goes before you answer,
+   * the prompt goes with it.
+   */
   const hook = async (req: IncomingMessage, res: ServerResponse) => {
-    const raw = await bodyOf(req, res, "Only a hook on this machine may post to Guslar.")
+    const raw = await bodyOf(req, res, "Only a hook on this machine may post to Guslar.", MAX_HOOK_BODY)
     if (raw === undefined) return
     const request = parseHook(raw)
     if (!request) {
       sendJson(res, 400, { error: "The request cannot be read: expected { hunterId?, input }" })
       return
     }
-    sendJson(res, 202, { heard: hunters.hooked(request) })
+    const asking = request.input.hook_event_name === "PermissionRequest" ? hunters.asked(request) : undefined
+    if (!asking) {
+      const reply: HookReply = { heard: hunters.hooked(request) }
+      sendJson(res, 202, reply)
+      return
+    }
+    res.once("close", () => {
+      if (!res.writableFinished) asking.withdraw()
+    })
+    const decision = await asking.decision
+    if (res.destroyed) return
+    const reply: HookReply = decision ? { heard: true, decision } : { heard: true }
+    sendJson(res, 200, reply)
   }
 
   const http: Server = createServer((req, res) => {
@@ -185,6 +236,16 @@ export async function startServer(options: {
     if (req.url === "/api/hooks") {
       if (req.method === "POST") {
         hook(req, res).catch((error: unknown) => sendJson(res, 500, { error: String(error) }))
+        return
+      }
+      res.writeHead(405, { allow: "POST" })
+      res.end()
+      return
+    }
+    const prompt = PROMPTS.exec(req.url ?? "")
+    if (prompt?.[1] && prompt[2]) {
+      if (req.method === "POST") {
+        answer(prompt[1], prompt[2], req, res).catch((error: unknown) => sendJson(res, 500, { error: String(error) }))
         return
       }
       res.writeHead(405, { allow: "POST" })

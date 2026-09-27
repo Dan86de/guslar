@@ -659,7 +659,7 @@ const commands = {
     out(`every claude started from now on replays ${path.relative(ROOT, source)} after its first message: ${lines.length - gates.length - replies - hooks.length} lines`)
     out(`it waits at: ${gates.length ? gates.join(", ") : "(nowhere)"}`)
     if (replies) out(`it waits for its next message: ${replies === 1 ? "once" : `${replies} times`}`)
-    if (hooks.length) out(`it runs the repo's hooks for: ${hooks.join(", ")}`)
+    if (hooks.length) out(`it runs the repo's hooks for: ${[...new Set(hooks)].join(", ")}`)
   },
 
   async stop(flags) {

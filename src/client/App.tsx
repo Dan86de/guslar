@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { Journal } from "./Journal.js"
 import { NoticeBoard } from "./NoticeBoard.js"
+import { Prompts } from "./Prompts.js"
 import { useWorld } from "./useWorld.js"
 import { WorldMap, type VillageRef } from "./WorldMap.js"
 
@@ -23,6 +24,7 @@ export function App() {
     <main>
       <h1 className="visually-hidden">Guslar</h1>
       <WorldMap world={world} onOpenVillage={setOpened} onOpenHunter={setReading} />
+      {world && <Prompts world={world} />}
       {opened && village && (
         <NoticeBoard
           key={`${opened.slot}/${village.slug}`}

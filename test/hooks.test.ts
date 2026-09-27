@@ -76,8 +76,10 @@ describe("installing and removing Guslar's hooks", () => {
     }
     const script = path.resolve("dist/server/guslar-hook.js")
     for (const event of EVENTS) {
+      // A permission request waits on your answer on the map; every other event is posted and done.
+      const timeout = event === "PermissionRequest" ? 300 : 10
       expect(installed.hooks?.[event]?.filter(isGuslars)).toEqual([
-        { hooks: [{ type: "command", command: `node '${script}'`, timeout: 10 }] },
+        { hooks: [{ type: "command", command: `node '${script}'`, timeout }] },
       ])
     }
   })
