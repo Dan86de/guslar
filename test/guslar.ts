@@ -85,8 +85,12 @@ export async function startGuslar(
 
 /** Runs Guslar expecting it to refuse to start, and returns what it said. */
 export function failGuslar(args: string[]): Promise<{ code: number | null; output: string }> {
-  const home = tempDir()
-  const child = spawn(process.execPath, [binPath(), "--port", "0", "--no-open", ...args], {
+  return runGuslar(["--port", "0", "--no-open", ...args])
+}
+
+/** Runs a `guslar` command that ends by itself, such as `guslar hooks install`, and returns what it said. */
+export function runGuslar(args: string[], home = tempDir()): Promise<{ code: number | null; output: string }> {
+  const child = spawn(process.execPath, [binPath(), ...args], {
     env: { PATH: process.env.PATH, HOME: home },
     stdio: ["ignore", "pipe", "pipe"],
   })

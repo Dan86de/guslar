@@ -97,7 +97,12 @@ export type Hunter = {
   state: HunterState
   /** The conversation so far, oldest first. */
   journal: JournalEntry[]
+  /** The last event its session's hooks posted, once one has. */
+  lastHook?: HookSighting
 }
+
+/** A hook event as the map sees it: which event, and the tool it is about, if any. */
+export type HookSighting = { event: string; tool?: string }
 
 /** What the server broadcasts to every open map. Slots are always in REGION_SLOTS order. */
 export type WorldState = { slots: SlotState[]; hunters: Hunter[] }
@@ -107,6 +112,15 @@ export type TakeRequest = { slot: RegionSlot; village: string; contract: string;
 
 /** What a map posts to `/api/hunters/<id>/replies` to write to a hunter in its journal. */
 export type ReplyRequest = { text: string }
+
+/**
+ * What Guslar's hook posts to `/api/hooks`: the event as Claude Code gave it on the hook's stdin,
+ * and the hunter whose session it came from, when the session is one Guslar started.
+ */
+export type HookRequest = {
+  hunterId?: string
+  input: { hook_event_name?: unknown; tool_name?: unknown; session_id?: unknown } & Record<string, unknown>
+}
 
 /** A village takes one hunter at a time; this is what it says to a second one. */
 export function refusalOf(village: Pick<Village, "title">, holder: Pick<Hunter, "name" | "contract">): string {

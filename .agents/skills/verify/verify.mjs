@@ -451,8 +451,10 @@ const commands = {
       env.GUSLAR_WORLD = value
     }
     // A one-off `guslar` with this run's environment, for what the CLI says and its exit code.
-    // It never opens a browser and never takes the run's port.
-    const child = spawn(process.execPath, [CLI, "--port", "0", "--no-open", ...args], {
+    // It never opens a browser and never takes the run's port. A command, like `hooks install`,
+    // starts no server, so it runs as given.
+    const command = args[0] !== undefined && !args[0].startsWith("-")
+    const child = spawn(process.execPath, [CLI, ...(command ? [] : ["--port", "0", "--no-open"]), ...args], {
       cwd: run,
       env,
       stdio: ["ignore", "pipe", "pipe"],
@@ -640,6 +642,7 @@ const commands = {
     }
     const lines = readFileSync(source, "utf8").split("\n").filter(Boolean)
     const gates = []
+    const hooks = []
     let replies = 0
     for (const [index, line] of lines.entries()) {
       let entry
@@ -650,11 +653,13 @@ const commands = {
       }
       if (entry.replay === "wait") gates.push(`gates/${entry.for}`)
       if (entry.replay === "next") replies++
+      if (entry.replay === "hook") hooks.push(entry.event)
     }
     writeFileSync(path.join(run, "claude-transcript.jsonl"), `${lines.join("\n")}\n`)
-    out(`every claude started from now on replays ${path.relative(ROOT, source)} after its first message: ${lines.length - gates.length - replies} lines`)
+    out(`every claude started from now on replays ${path.relative(ROOT, source)} after its first message: ${lines.length - gates.length - replies - hooks.length} lines`)
     out(`it waits at: ${gates.length ? gates.join(", ") : "(nowhere)"}`)
     if (replies) out(`it waits for its next message: ${replies === 1 ? "once" : `${replies} times`}`)
+    if (hooks.length) out(`it runs the repo's hooks for: ${hooks.join(", ")}`)
   },
 
   async stop(flags) {

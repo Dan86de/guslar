@@ -60,6 +60,16 @@ Slots with no repo stay under fog.
 A region is named after its repo folder unless you give it a `name`.
 Relative repo paths start at the folder holding `world.json`.
 
+## Hooks
+
+```bash
+npx guslar hooks install
+```
+
+Guslar hears what each hunter's session does through Claude Code hooks.
+`hooks install` adds them to `.claude/settings.local.json` in every repo of your world, after any hooks you already have, and keeps that file out of `git status`.
+`npx guslar hooks remove` takes them out again and leaves the file as you wrote it.
+
 ## Options
 
 - `--world <file>`: the world to read.

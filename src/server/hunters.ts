@@ -1,7 +1,16 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import { createInterface } from "node:readline"
-import type { ContractState, Hunter, HunterState, JournalEntry, SlotState, TakeRequest } from "../shared/world.js"
+import type {
+  ContractState,
+  HookRequest,
+  HookSighting,
+  Hunter,
+  HunterState,
+  JournalEntry,
+  SlotState,
+  TakeRequest,
+} from "../shared/world.js"
 import { isReturned, refusalOf } from "../shared/world.js"
 
 /** Names handed out in order, the first one no hunter out is using. Original, from Slavic naming, none from the Witcher. */
@@ -166,6 +175,8 @@ function userMessage(text: string): string {
 export class Hunters {
   private readonly out = new Map<string, { hunter: Hunter; process: ChildProcessWithoutNullStreams }>()
   private readonly listeners = new Set<() => void>()
+  /** Where this Guslar listens, given to each hunter as `GUSLAR_URL` so its hooks can reach it. */
+  private url: string | undefined
 
   /**
    * `claude` is the program each hunter runs: `GUSLAR_CLAUDE`, or `claude` on the PATH.
@@ -175,6 +186,11 @@ export class Hunters {
     private readonly claude: string,
     private readonly lookup: ContractLookup,
   ) {}
+
+  /** Tells the hunters sent from now on where this Guslar listens. */
+  listenAt(url: string): void {
+    this.url = url
+  }
 
   list(): Hunter[] {
     return [...this.out.values()].map((entry) => entry.hunter)
@@ -206,7 +222,7 @@ export class Hunters {
     const id = randomUUID()
     const child = spawn(this.claude, claudeArgs(request.permissionMode), {
       cwd: region.repo,
-      env: { ...process.env, GUSLAR_HUNTER_ID: id },
+      env: { ...process.env, GUSLAR_HUNTER_ID: id, ...(this.url ? { GUSLAR_URL: this.url } : {}) },
       stdio: ["pipe", "pipe", "pipe"],
     })
     const started = await new Promise<Error | undefined>((resolve) => {
@@ -263,6 +279,21 @@ export class Hunters {
     entry.hunter.journal.push(sent)
     this.changed()
     return { sent }
+  }
+
+  /**
+   * Takes a hook event its session posted: the hunter it names shows it as its last. Says
+   * whether a hunter heard it; an event from a session Guslar did not start is not heard yet.
+   */
+  hooked(request: HookRequest): boolean {
+    const entry = request.hunterId ? this.out.get(request.hunterId) : undefined
+    const event = request.input.hook_event_name
+    if (!entry || typeof event !== "string" || event === "") return false
+    const tool = request.input.tool_name
+    const sighting: HookSighting = typeof tool === "string" && tool !== "" ? { event, tool } : { event }
+    entry.hunter.lastHook = sighting
+    this.changed()
+    return true
   }
 
   /**

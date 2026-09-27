@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url"
 import sirv from "sirv"
 import { WebSocketServer, type WebSocket } from "ws"
 import {
+  type HookRequest,
   isPermissionMode,
   isRegionSlot,
   type ServerMessage,
@@ -67,6 +68,14 @@ function parseTake(raw: unknown): TakeRequest | string {
   return { slot, village, contract, permissionMode }
 }
 
+function parseHook(raw: unknown): HookRequest | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined
+  const { hunterId, input } = raw as Record<string, unknown>
+  if (hunterId !== undefined && typeof hunterId !== "string") return undefined
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return undefined
+  return { hunterId, input: input as HookRequest["input"] }
+}
+
 function parseReply(raw: unknown): string | undefined {
   if (typeof raw !== "object" || raw === null) return undefined
   const { text } = raw as Record<string, unknown>
@@ -91,7 +100,8 @@ export async function startServer(options: {
    * A take starts a program on the user's machine, and a reply tells it what to do, so only the
    * map this server serves may ask for either: a JSON body (which a page elsewhere cannot send without a preflight this server
    * never answers), from this server's own origin, addressed to this machine by a name it
-   * answers to (which a rebound DNS name is not).
+   * answers to (which a rebound DNS name is not). A hook event moves a hunter on the map, so it
+   * passes the same test; Guslar's hook runs outside any page and sends no origin.
    */
   const fromOwnMap = (req: IncomingMessage): boolean => {
     const own = new Set([`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`, `${host}:${port}`])
@@ -147,6 +157,17 @@ export async function startServer(options: {
     else sendJson(res, result.status, { error: result.error })
   }
 
+  const hook = async (req: IncomingMessage, res: ServerResponse) => {
+    const raw = await bodyOf(req, res, "Only a hook on this machine may post to Guslar.")
+    if (raw === undefined) return
+    const request = parseHook(raw)
+    if (!request) {
+      sendJson(res, 400, { error: "The request cannot be read: expected { hunterId?, input }" })
+      return
+    }
+    sendJson(res, 202, { heard: hunters.hooked(request) })
+  }
+
   const http: Server = createServer((req, res) => {
     if (req.url === "/api/world") {
       sendJson(res, 200, world())
@@ -155,6 +176,15 @@ export async function startServer(options: {
     if (req.url === "/api/hunters") {
       if (req.method === "POST") {
         take(req, res).catch((error: unknown) => sendJson(res, 500, { error: String(error) }))
+        return
+      }
+      res.writeHead(405, { allow: "POST" })
+      res.end()
+      return
+    }
+    if (req.url === "/api/hooks") {
+      if (req.method === "POST") {
+        hook(req, res).catch((error: unknown) => sendJson(res, 500, { error: String(error) }))
         return
       }
       res.writeHead(405, { allow: "POST" })
