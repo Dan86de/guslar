@@ -1,0 +1,6 @@
+interface:
+  display_name: "Verify"
+  short_description: "Start Guslar in an isolated run, drive it, and record whether each check passed"
+
+policy:
+  allow_implicit_invocation: true
