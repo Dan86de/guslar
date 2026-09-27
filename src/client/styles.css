@@ -553,3 +553,31 @@ main {
   background: var(--rust);
   outline: none;
 }
+
+/* Hunters on the map: the figure is painted on the canvas; this is its name, over its head. */
+
+.hunter {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 2px));
+  transition-property: left, top;
+  /* The canvas figure rides with the same ease-in-out, so the name keeps under it. */
+  transition-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
+  pointer-events: none;
+}
+
+.hunter-name {
+  display: block;
+  padding: 0 0.45em 0.08em;
+  color: var(--bone);
+  font-size: clamp(10px, 0.8vw, 14px);
+  font-style: italic;
+  white-space: nowrap;
+  background: rgb(29 24 18 / 0.78);
+  border: 1px solid rgb(217 203 168 / 0.35);
+  border-radius: 2px;
+}
+
+.hunter[data-state="awaiting-you"] .hunter-name {
+  border-color: var(--rust);
+  box-shadow: inset 0 0 0 1px var(--rust);
+}

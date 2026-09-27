@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react"
 import {
+  isReturned,
   refusalOf,
   type Contract,
   type Hunter,
@@ -33,6 +34,18 @@ function stateLine(contract: Contract): string {
   }
 }
 
+/** What a contract's card says of the hunter sent on it: out on it, or how it came back. */
+function hunterLine(hunter: Hunter): string {
+  switch (hunter.state) {
+    case "returned-trophy":
+      return `${hunter.name} returned with a trophy`
+    case "returned-wounded":
+      return `${hunter.name} returned wounded`
+    default:
+      return `${hunter.name} hunts it`
+  }
+}
+
 function ContractCard({
   contract,
   hunter,
@@ -55,14 +68,11 @@ function ContractCard({
         </span>
         <span className="card-title">{contract.title}</span>
         <span className="card-state">{stateLine(contract)}</span>
-        {hunter ? (
-          <span className="card-hunter">{`${hunter.name} hunts it`}</span>
-        ) : (
-          contract.state === "ready" && (
-            <button type="button" className="card-take" aria-label={`Take ${contract.id}`} onClick={() => onTake(contract)}>
-              Take
-            </button>
-          )
+        {hunter && <span className="card-hunter">{hunterLine(hunter)}</span>}
+        {contract.state === "ready" && !(hunter && !isReturned(hunter)) && (
+          <button type="button" className="card-take" aria-label={`Take ${contract.id}`} onClick={() => onTake(contract)}>
+            Take
+          </button>
         )}
       </span>
     </li>
@@ -161,7 +171,7 @@ export function NoticeBoard({
 }: {
   slot: RegionSlot
   village: Village
-  /** The hunters out on this village's contracts. */
+  /** The hunters on this village's contracts, out or returned. */
   hunters: Hunter[]
   onClose: () => void
 }) {
@@ -177,7 +187,8 @@ export function NoticeBoard({
 
   const take = (contract: Contract) => {
     // A village takes one hunter at a time; the server says the same if the map is behind.
-    const holder = hunters[0]
+    // A hunter that has returned holds it no longer.
+    const holder = hunters.find((h) => !isReturned(h))
     if (holder) {
       setRefusal(refusalOf(village, holder))
       return

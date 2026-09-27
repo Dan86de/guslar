@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util"
 import path from "node:path"
-import { REGION_SLOTS, type RegionSlot, type SlotState, type World } from "../shared/world.js"
+import { REGION_SLOTS, type ContractState, type RegionSlot, type SlotState, type World } from "../shared/world.js"
 import { RegionReader } from "./region.js"
 
 /** How often the repos are read again, so the map follows what the skills write. */
@@ -29,6 +29,12 @@ export class WorldReader {
         }
       }),
     )
+  }
+
+  /** Reads one contract's state from its repo now, or undefined when its region, village or contract is gone. */
+  async contract(slot: RegionSlot, village: string, id: string): Promise<ContractState | undefined> {
+    const villages = await this.readers.get(slot)?.villages()
+    return villages?.find((v) => v.slug === village)?.contracts.find((c) => c.id === id)?.state
   }
 
   /**

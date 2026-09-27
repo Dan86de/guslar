@@ -92,6 +92,7 @@ describe("sending a hunter on a ready contract", () => {
         village: "drain-the-bog",
         contract: "S3",
         permissionMode: "acceptEdits",
+        state: "riding-out",
       },
     ])
     expect(body.hunter?.id).toMatch(/^[0-9a-f-]{36}$/)

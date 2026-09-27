@@ -50,7 +50,9 @@ async function main(): Promise<void> {
   const reader = new WorldReader(world)
   const initial = await reader.read()
 
-  const hunters = new Hunters(process.env.GUSLAR_CLAUDE?.trim() || "claude")
+  const hunters = new Hunters(process.env.GUSLAR_CLAUDE?.trim() || "claude", (hunter) =>
+    reader.contract(hunter.slot, hunter.village, hunter.contract),
+  )
 
   let server
   try {
@@ -67,7 +69,10 @@ async function main(): Promise<void> {
   console.log(`Guslar is listening on ${server.url}`)
 
   const running = server
-  const unfollow = reader.follow(initial, (next) => running.update(next))
+  const unfollow = reader.follow(initial, (next) => {
+    hunters.see(next)
+    running.update(next)
+  })
 
   if (values.open) openBrowser(server.url)
 

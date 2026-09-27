@@ -35,7 +35,10 @@ function crop(source: HTMLCanvasElement, box: Box | undefined): HTMLCanvasElemen
   return cropped
 }
 
-/** The image with its background taken out, and the box of what still shows, if anything does. */
+/**
+ * The image with its background taken out, and the box of what still shows, if anything does.
+ * An image whose border is already transparent was cut out when it was made, and is only boxed.
+ */
 function lift(image: HTMLImageElement, near: number, far: number): { canvas: HTMLCanvasElement; box?: Box } {
   const width = image.naturalWidth
   const height = image.naturalHeight
@@ -51,6 +54,11 @@ function lift(image: HTMLImageElement, near: number, far: number): { canvas: HTM
   const border: number[] = []
   for (let x = 0; x < width; x++) border.push(x, (height - 1) * width + x)
   for (let y = 0; y < height; y++) border.push(y * width, y * width + width - 1)
+
+  // Art that was cut out already, with its border transparent, keeps its own alpha.
+  const clearBorder = border.filter((i) => (data[i * 4 + 3] ?? 255) < 8).length
+  if (clearBorder > border.length / 2) return { canvas: source, box: boxOf(data, width, height) }
+
   const background = [0, 1, 2].map((channel) => median(border.map((i) => data[i * 4 + channel] ?? 0)))
 
   const distance = (i: number) =>
@@ -93,8 +101,11 @@ function lift(image: HTMLImageElement, near: number, far: number): { canvas: HTM
     }
   }
   ctx.putImageData(pixels, 0, 0)
+  return { canvas: source, box: boxOf(data, width, height) }
+}
 
-  // The box of the pixels that still show.
+/** The box of the pixels that show, if any do. */
+function boxOf(data: Uint8ClampedArray, width: number, height: number): Box | undefined {
   let left = width
   let right = -1
   let top = height
@@ -108,8 +119,7 @@ function lift(image: HTMLImageElement, near: number, far: number): { canvas: HTM
       bottom = Math.max(bottom, y)
     }
   }
-  if (right < left) return { canvas: source }
-  return { canvas: source, box: { left, top, right, bottom } }
+  return right < left ? undefined : { left, top, right, bottom }
 }
 
 function median(values: number[]): number {

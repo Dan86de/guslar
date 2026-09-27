@@ -58,6 +58,21 @@ export const PERMISSION_MODES = ["default", "acceptEdits", "auto", "bypassPermis
 
 export type PermissionMode = (typeof PERMISSION_MODES)[number]
 
+/**
+ * Where a hunter is, read from its session's stream-json: `riding-out` until the session
+ * first answers, `hunting` while it works, `awaiting-you` while it asks you something or
+ * waits on a permission, `returned-trophy` once its contract's commit lands (done or pending
+ * sign-off), and `returned-wounded` when its turn ends without one.
+ */
+export const HUNTER_STATES = ["riding-out", "hunting", "awaiting-you", "returned-trophy", "returned-wounded"] as const
+
+export type HunterState = (typeof HUNTER_STATES)[number]
+
+/** A hunter back in its village, trophy or wound, no longer holds the village. */
+export function isReturned(hunter: Pick<Hunter, "state">): boolean {
+  return hunter.state === "returned-trophy" || hunter.state === "returned-wounded"
+}
+
 /** A Claude Code session Guslar started on a contract, while its process runs. */
 export type Hunter = {
   /** Given to the session as `GUSLAR_HUNTER_ID`, so its hooks and stream join up. */
@@ -68,6 +83,7 @@ export type Hunter = {
   village: string
   contract: string
   permissionMode: PermissionMode
+  state: HunterState
 }
 
 /** What the server broadcasts to every open map. Slots are always in REGION_SLOTS order. */

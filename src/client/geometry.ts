@@ -89,3 +89,21 @@ export function villageSpots(slot: RegionSlot, count: number, aspect: number): V
     }
   })
 }
+
+/** Where a hunter stands, in map pixels: the point under its feet. */
+export type Footing = { x: number; y: number }
+
+/**
+ * Where a village's hunter stands, and how tall it is drawn, from the village's spot and its
+ * art's aspect: `home` at the village's right edge, where it comes back to, and `field` out to
+ * the right of it, where it hunts. Both stay inside the village's share of the region, clear
+ * of the next village in its row and of the village's own name under it.
+ */
+export function hunterGround(spot: VillageSpot, aspect: number): { home: Footing; field: Footing; height: number } {
+  const height = spot.width * aspect
+  return {
+    home: { x: spot.x + spot.width * 0.74, y: spot.y + height * 0.42 },
+    field: { x: spot.x + spot.width * 0.93, y: spot.y + height * 0.2 },
+    height: height * 0.8,
+  }
+}

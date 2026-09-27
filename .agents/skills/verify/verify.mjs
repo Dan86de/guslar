@@ -115,6 +115,8 @@ function guslarEnv(run) {
     VERIFY_BROWSER_LOG: path.join(run, "browser.log"),
     GUSLAR_CLAUDE: RECORD_CLAUDE,
     VERIFY_CLAUDE_LOG: path.join(run, "claude.log"),
+    VERIFY_CLAUDE_TRANSCRIPT: path.join(run, "claude-transcript.jsonl"),
+    VERIFY_CLAUDE_GATES: path.join(run, "gates"),
   }
 }
 
@@ -587,13 +589,44 @@ const commands = {
     if (!file || content === undefined) throw new Refusal("write <path in run folder> <content>")
     const target = path.resolve(run, file)
     if (!inside(target, run) || target === run) throw new Refusal(`${file} is outside the run folder`)
-    if (["state.json", "transcript.log", "evidence.md"].includes(path.relative(run, target))) {
+    if (["state.json", "transcript.log", "evidence.md", "claude-transcript.jsonl"].includes(path.relative(run, target))) {
       throw new Refusal(`${file} belongs to the skill; write it by other means`)
     }
     mkdirSync(path.dirname(target), { recursive: true })
     writeFileSync(target, content.endsWith("\n") ? content : `${content}\n`)
     out(`wrote ${path.relative(ROOT, target)}:`)
     out(readFileSync(target, "utf8").trimEnd())
+  },
+
+  async pause(flags, [ms]) {
+    runDir(flags)
+    const wait = Number(ms)
+    if (!Number.isInteger(wait) || wait < 1 || wait > 10000) throw new Refusal("pause <ms, 1 to 10000>")
+    await new Promise((resolve) => setTimeout(resolve, wait))
+    out(`paused ${wait} ms`)
+  },
+
+  async replay(flags, [file]) {
+    const run = runDir(flags)
+    if (!file) throw new Refusal("replay <stream-json transcript in this repo>")
+    const source = path.resolve(file)
+    if (!inside(source, ROOT) || inside(source, RUNS) || !source.endsWith(".jsonl") || !existsSync(source)) {
+      throw new Refusal(`${file} is not a .jsonl transcript in this repo`)
+    }
+    const lines = readFileSync(source, "utf8").split("\n").filter(Boolean)
+    const gates = []
+    for (const [index, line] of lines.entries()) {
+      let entry
+      try {
+        entry = JSON.parse(line)
+      } catch {
+        throw new Refusal(`${file} line ${index + 1} is not JSON`)
+      }
+      if (entry.replay === "wait") gates.push(`gates/${entry.for}`)
+    }
+    writeFileSync(path.join(run, "claude-transcript.jsonl"), `${lines.join("\n")}\n`)
+    out(`every claude started from now on replays ${path.relative(ROOT, source)} after its first message: ${lines.length - gates.length} lines`)
+    out(`it waits at: ${gates.length ? gates.join(", ") : "(nowhere)"}`)
   },
 
   async stop(flags) {
