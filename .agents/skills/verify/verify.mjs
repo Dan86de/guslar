@@ -187,6 +187,14 @@ function ownUrl(state, target) {
 
 const DEFAULT_VIEWPORT = "1440x900"
 
+/** What a check needs to lay down a region's history: make commits and branches, and read them back. */
+const GIT_SUBCOMMANDS = ["init", "add", "commit", "switch", "branch", "log", "rev-parse", "status"]
+
+async function accessibleName(locator) {
+  const snapshot = await locator.ariaSnapshot()
+  return /^- button "(.*)"/.exec(snapshot)?.[1] ?? snapshot
+}
+
 const DEFAULT_WORLD = {
   regions: [
     { slot: "forest", repo: "./repos/bogwater", name: "Bogwater Reach" },
@@ -461,6 +469,68 @@ const commands = {
     out(alive(child.pid) ? `pid ${child.pid} is still running` : `pid ${child.pid} has ended`)
   },
 
+  async click(flags, [name]) {
+    const run = runDir(flags)
+    if (!name) throw new Refusal("say what to click: click <accessible name of a button>")
+    return withPage(run, async (page) => {
+      const buttons = page.getByRole("button", { name, exact: false })
+      const count = await buttons.count()
+      if (count !== 1) {
+        out(count === 0 ? `no button named "${name}"` : `${count} buttons match "${name}"; name one of them fully`)
+        for (const button of await page.getByRole("button").all()) out(`  button: ${await accessibleName(button)}`)
+        return 1
+      }
+      const full = await accessibleName(buttons)
+      await buttons.click()
+      await page.waitForTimeout(500)
+      out(`clicked button "${full}"`)
+    })
+  },
+
+  async press(flags, [key]) {
+    const run = runDir(flags)
+    if (!key) throw new Refusal("say which key: press <key>, like Escape or Tab")
+    return withPage(run, async (page) => {
+      await page.keyboard.press(key)
+      await page.waitForTimeout(500)
+      out(`pressed ${key}`)
+    })
+  },
+
+  async git(flags, [repo, subcommand, ...args]) {
+    const run = runDir(flags)
+    if (!repo || !subcommand) throw new Refusal("git <repo in run folder> <subcommand> [args…]")
+    const dir = path.resolve(run, repo)
+    if (!inside(dir, run) || dir === run) throw new Refusal(`${repo} is outside the run folder`)
+    if (!GIT_SUBCOMMANDS.includes(subcommand)) {
+      throw new Refusal(`git ${subcommand} is not one a run needs; use one of ${GIT_SUBCOMMANDS.join(", ")}`)
+    }
+    mkdirSync(dir, { recursive: true })
+    // The run's own identity and HOME, and none of the user's git config: nothing here signs or pushes.
+    const child = spawn("git", [subcommand, ...args], {
+      cwd: dir,
+      env: {
+        PATH: process.env.PATH,
+        HOME: path.join(run, "home"),
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_CEILING_DIRECTORIES: path.dirname(dir),
+        GIT_AUTHOR_NAME: "Verify",
+        GIT_AUTHOR_EMAIL: "verify@guslar.invalid",
+        GIT_COMMITTER_NAME: "Verify",
+        GIT_COMMITTER_EMAIL: "verify@guslar.invalid",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    })
+    let output = ""
+    child.stdout.on("data", (c) => (output += c))
+    child.stderr.on("data", (c) => (output += c))
+    const code = await new Promise((resolve) => child.once("exit", resolve))
+    if (output.trimEnd()) out(output.trimEnd())
+    out(`git exited: ${code}`)
+    return code === 0 ? 0 : 1
+  },
+
   async "server-stop"(flags) {
     const run = runDir(flags)
     const state = readState(run)
@@ -543,7 +613,8 @@ function newerThanBuild(builtAt) {
     }
   }
   walk(path.join(ROOT, "src"))
-  for (const file of ["index.html", "package.json", "vite.config.ts", "art/world-map.png", "art/fog.png"]) {
+  const art = readdirSync(path.join(ROOT, "art")).filter((file) => file.endsWith(".png")).map((file) => `art/${file}`)
+  for (const file of ["index.html", "package.json", "vite.config.ts", ...art]) {
     if (statSync(path.join(ROOT, file)).mtimeMs > builtAt) changed.push(file)
   }
   return changed
@@ -592,10 +663,11 @@ function parse(argv) {
   const [name, ...rest] = argv
   const flags = {}
   const positional = []
-  const passthrough = name === "guslar"
+  // `guslar` and `git` pass their own options through; only --run (and --env for guslar) is the helper's.
+  const passthrough = name === "guslar" || name === "git"
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i]
-    if (arg === "--run" || (passthrough && arg === "--env") || (!passthrough && ["--world", "--timeout", "--size", "--signal", "--clip", "--zoom"].includes(arg))) {
+    if (arg === "--run" || (name === "guslar" && arg === "--env") || (!passthrough && ["--world", "--timeout", "--size", "--signal", "--clip", "--zoom"].includes(arg))) {
       flags[arg.slice(2)] = rest[++i]
     } else if (!passthrough && arg === "--gone") {
       flags.gone = true

@@ -5,6 +5,7 @@ A person reads it as the product's checklist; the verify skill (`.agents/skills/
 
 Guslar is a local web app started with `guslar` (`npx guslar` once published).
 It draws the repos listed in a `world.json` as regions of one painted map, and covers every empty slot in fog.
+Every spec in a region's repo is a village, and each village's notice board carries that spec's contracts and their states.
 
 ## Start from a known state
 
@@ -41,4 +42,5 @@ No implementation details: only user paths, handles, commands, state and what pr
 
 - [Open the world](./open-the-world.md): `guslar` starts the server, opens the browser, and the map shows each region in its slot and fog elsewhere.
 - [Configure the world](./configure-the-world.md): which `world.json` Guslar reads, how regions are named, and the configs it refuses.
+- [Read a village's notice board](./villages.md): every spec is a village on the map, and its board shows each contract's title, autonomy and state from the `slices/<slug>` trailers.
 - [Lose and regain the server](./reconnect.md): the map says when the server is gone and recovers by itself when it is back.

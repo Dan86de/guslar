@@ -67,7 +67,8 @@ Start options:
 What a run cannot reach, and so refuses:
 
 - any URL that is not this run's Guslar (`open`, `http`, `world`)
-- a world file, `GUSLAR_WORLD` or file write outside the run folder, and any repo outside it
+- a world file, `GUSLAR_WORLD` or file write outside the run folder, and any repo outside it, `git` included
+- any `git` subcommand but those listed under Drive
 - a run folder this skill did not start
 - any other environment variable for `guslar`
 
@@ -80,7 +81,7 @@ Two runs can go side by side: nothing is shared but the built `dist/`, which eac
 ```
 
 Read-only. It prints `fit: guslar pid … at …, browser pid …, build is current` and exits 0, or `unfit` with one line per problem and exits 1.
-It checks that the recorded Guslar is alive and is this run's `dist/server/cli.js` reading this run's world, that it answers and serves no repo outside the run, that nothing in `src/`, `index.html`, `package.json`, `vite.config.ts` or the map art changed since start, and that the browser is alive.
+It checks that the recorded Guslar is alive and is this run's `dist/server/cli.js` reading this run's world, that it answers and serves no repo outside the run, that nothing in `src/`, `index.html`, `package.json`, `vite.config.ts` or the art in `art/` changed since start, and that the browser is alive.
 
 Run it first, and again whenever something looks off.
 Unfit because the build is stale means your edit is not in the running product: stop and start a new run.
@@ -96,6 +97,9 @@ Unfit because the build is stale means your edit is not in the running product: 
 | `world` | Connects to `/ws` as a map does and prints the first message, pretty-printed JSON shaped `{"type": "world", "world": {"slots": [...]}}`. |
 | `http <path>` | GETs a path of this run's Guslar and prints `HTTP <status> <content type>`, then the body. |
 | `guslar [--env GUSLAR_WORLD=<file>] [args…]` | Runs a one-off `guslar --port 0 --no-open [args…]` in the run folder with the run's environment; your args come last and override those defaults. It does not get the run's `world.json`: without `--world` or `GUSLAR_WORLD` it reads `home/.guslar/world.json`. It never opens a browser, so `browser.log` does not change. It prints `one-off guslar pid <n>`, what Guslar printed, then either `guslar exited by itself: <code>`, or `it started; world served at /api/world: <json>` and `stopped it`, and last `pid <n> has ended`. |
+| `click <name>` | Clicks the one button whose accessible name contains `<name>`, as a user clicking it, and prints `clicked button "<full name>"`. With none or several matching, it says so, lists every button's name, and exits 1. |
+| `press <key>` | Presses a key on the page, like `Escape`, `Tab` or `Enter`, and prints `pressed <key>`. |
+| `git <repo> <subcommand> [args…]` | Runs `git <subcommand> [args…]` in a repo folder inside the run (made if missing), as a user of that repo does, and prints git's output, then `git exited: <code>`. Subcommands are `init`, `add`, `commit`, `switch`, `branch`, `log`, `rev-parse` and `status`. It runs with the run's `HOME`, the author and committer `Verify <verify@guslar.invalid>`, none of the user's git config, and no search for a repo above the folder, so it never signs, pushes, or touches the Guslar checkout the run folder sits in. |
 | `server-stop [--signal INT\|HUP\|TERM\|KILL]` | Stops this run's Guslar with that signal and prints `stopped guslar (pid <n>) with SIG<name>`. `INT` is Ctrl-C, `HUP` is its terminal closing, `TERM` (the default) is a service manager stopping it, `KILL` is a crash. The browser stays. |
 | `server-start` | Starts this run's Guslar again on the same port and prints `guslar: <url> (pid <n>), same port as before`. |
 | `write <path> <content>` | Writes a file inside the run folder, making its folders, and prints `wrote <file>:` followed by what the file now holds. Use it for every world file a check needs, so the write is in the transcript. |
@@ -107,6 +111,8 @@ Handles to use:
 - On the page: the heading `Guslar`, the list named `Regions`, and its six items in slot order.
   A region item reads `<name> , <slot name>` and a fogged one `Unclaimed <slot name>, under fog`, where the slot name is the slot with its hyphen as a space (`river town`).
   When the server is gone there is a status `The road to the server is cut. Reconnecting…`.
+- The list named `Villages`, after `Regions`: one item per spec, region by region in slot order, each a button named `<village title> , village in <region name>`.
+- An opened village is a dialog named `Notice board of <village title>`, with a button `Close the notice board` and a list `Contracts` whose items read `<id> <afk|hitl> <title> <state>`, the state being `Done`, `Pending`, `Ready` or `Sealed by <ids>`.
 - On the CLI: the lines `Guslar reads <file> (<n> regions)` and `Guslar is listening on <url>`, and refusals starting `guslar: `.
 
 The map itself is a canvas: its art and fog are checked by screenshot, and everything a check asserts in words comes from the accessibility tree, the broadcast or the CLI.

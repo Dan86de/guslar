@@ -29,8 +29,20 @@ describe("opening the world", () => {
     const world = await receiveWorld(running.url)
     const regions = world.slots.filter((slot) => slot.kind === "region")
     expect(regions).toEqual([
-      { slot: "forest", kind: "region", name: "Bogwater Reach", repo: path.join(fixtures, "world", "repos", "bogwater") },
-      { slot: "river-town", kind: "region", name: "kettle", repo: path.join(running.home, "github", "kettle") },
+      {
+        slot: "forest",
+        kind: "region",
+        name: "Bogwater Reach",
+        repo: path.join(fixtures, "world", "repos", "bogwater"),
+        villages: [],
+      },
+      {
+        slot: "river-town",
+        kind: "region",
+        name: "kettle",
+        repo: path.join(running.home, "github", "kettle"),
+        villages: [],
+      },
     ])
   })
 
@@ -68,6 +80,7 @@ describe("opening the world", () => {
       kind: "region",
       name: "somewhere",
       repo: "/tmp/somewhere",
+      villages: [],
     })
   })
 

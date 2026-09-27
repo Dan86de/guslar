@@ -3,7 +3,7 @@ import { parseArgs } from "node:util"
 import { openBrowser } from "./browser.js"
 import { defaultWorldPath, loadWorld, WorldConfigError } from "./config.js"
 import { startServer } from "./server.js"
-import { projectWorld } from "./world.js"
+import { WorldReader } from "./world.js"
 
 const DEFAULT_PORT = 4747
 
@@ -41,9 +41,12 @@ async function main(): Promise<void> {
   const worldFile = values.world ?? process.env.GUSLAR_WORLD ?? defaultWorldPath()
   const world = await loadWorld(worldFile)
 
+  const reader = new WorldReader(world)
+  const initial = await reader.read()
+
   let server
   try {
-    server = await startServer({ world: projectWorld(world), host: values.host, port })
+    server = await startServer({ world: initial, host: values.host, port })
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
       throw new WorldConfigError(`port ${port} is taken. Is Guslar already running? Pick another with --port.`)
@@ -55,9 +58,13 @@ async function main(): Promise<void> {
   console.log(`Guslar reads ${worldFile} (${regions} ${regions === 1 ? "region" : "regions"})`)
   console.log(`Guslar is listening on ${server.url}`)
 
+  const running = server
+  const unfollow = reader.follow(initial, (next) => running.broadcast(next))
+
   if (values.open) openBrowser(server.url)
 
   const stop = () => {
+    unfollow()
     void server.close().then(() => process.exit(0))
   }
   process.once("SIGINT", stop)

@@ -80,3 +80,274 @@ main {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* Villages on the map: the art is painted on the canvas; this is what you click. */
+
+.village {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.village button {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  font: inherit;
+  background: none;
+  border: 0;
+  border-radius: 40%;
+  cursor: pointer;
+}
+
+.village button:focus-visible {
+  outline: 2px solid var(--bone);
+  outline-offset: 2px;
+}
+
+.village-name {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translate(-50%, -35%);
+  padding: 0.1em 0.7em 0.2em;
+  color: var(--ink);
+  font-size: clamp(12px, 1.05vw, 18px);
+  white-space: nowrap;
+  background: var(--bone);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  box-shadow: 1px 2px 0 rgb(29 24 18 / 0.35);
+}
+
+.village button:hover .village-name,
+.village button:focus-visible .village-name {
+  background: #eee3c6;
+}
+
+/* The notice board: the board art at the viewport's height, the contracts pinned between its battens. */
+
+.board {
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  background: none;
+  place-items: center;
+}
+
+.board[open] {
+  display: grid;
+}
+
+.board::backdrop {
+  background: rgb(29 24 18 / 0.62);
+}
+
+/* The art has empty margins above the thatch and below the planks, so it may run past the viewport by them. */
+.board-art {
+  position: relative;
+  height: min(100vh, calc(96vw * 1536 / 1030));
+  aspect-ratio: 1030 / 1536;
+  background: url("../../art/notice-board.png") center / 100% 100% no-repeat;
+  filter: drop-shadow(4px 8px 10px rgb(0 0 0 / 0.5));
+  container-type: size;
+}
+
+.board-title {
+  position: absolute;
+  left: 50%;
+  top: 20.6%;
+  transform: translate(-50%, -50%);
+  max-width: 72%;
+  margin: 0;
+  padding: 0.15em 0.9em 0.25em;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 3.3cqh;
+  font-weight: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--bone);
+  border: 1.5px solid var(--ink);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 0 0 3px var(--bone),
+    inset 0 0 0 4px rgb(36 28 20 / 0.45),
+    2px 3px 0 rgb(29 24 18 / 0.35);
+}
+
+.board-close {
+  position: absolute;
+  right: 3%;
+  top: 7%;
+  padding: 0.2em 0.8em 0.3em;
+  color: var(--bone);
+  font: inherit;
+  font-size: 2.1cqh;
+  background: rgb(29 24 18 / 0.85);
+  border: 1px solid var(--rust);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.board-close:hover,
+.board-close:focus-visible {
+  background: var(--rust);
+  outline: none;
+}
+
+.board-face {
+  position: absolute;
+  left: 14.6%;
+  width: 70.8%;
+  top: 29.8%;
+  height: 60.6%;
+  overflow: hidden auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bog) transparent;
+}
+
+.board-note {
+  margin: 12% 8%;
+  padding: 1em 1.2em;
+  color: var(--ink);
+  font-size: 2.2cqh;
+  background: var(--bone);
+  border: 1px solid var(--ink);
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8cqh 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A contract card: the parchment's own aspect, its text inside the torn edge, between the nail and the seal. */
+/* The card art has an empty border of its own, so each card reaches over its cell's edges by it. */
+.card {
+  position: relative;
+  width: 114%;
+  margin-left: -7%;
+  aspect-ratio: 765 / 1024;
+  color: var(--ink);
+  background: url("../../art/contract-card.png") center / 100% 100% no-repeat;
+  container-type: inline-size;
+  filter: drop-shadow(1px 2px 1px rgb(0 0 0 / 0.45));
+}
+
+.card-text {
+  position: absolute;
+  inset: 17% 13% 12% 14%;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-text > * {
+  flex-shrink: 0;
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 5cqw;
+}
+
+.card-id {
+  font-size: 17cqw;
+  line-height: 1;
+}
+
+.card-title {
+  display: -webkit-box;
+  margin-top: 3cqw;
+  overflow: hidden;
+  font-size: 11.5cqw;
+  line-height: 1.1;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.card-autonomy {
+  color: rgb(36 28 20 / 0.78);
+  font-size: 10.5cqw;
+  font-style: italic;
+  line-height: 1;
+}
+
+/* The state sits at the foot of the card, left of the printed seal. */
+.card-state {
+  align-self: flex-start;
+  max-width: 64%;
+  margin-top: auto;
+  font-size: 11cqw;
+  line-height: 1.05;
+}
+
+/* Done: the bounty is paid, the card fades and carries a rust stamp. */
+.card[data-state="done"] {
+  filter: drop-shadow(1px 2px 1px rgb(0 0 0 / 0.45)) saturate(0.55) brightness(0.8);
+}
+
+.card[data-state="done"] .card-state {
+  padding: 0.05em 0.4em 0.12em;
+  color: var(--rust);
+  font-size: 11.5cqw;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 2px solid var(--rust);
+  border-radius: 3px;
+  transform: rotate(-9deg);
+}
+
+/* Ready: the one to take, bright and in full ink. */
+.card[data-state="ready"] .card-state {
+  font-size: 11.5cqw;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border-bottom: 2px solid var(--ink);
+}
+
+/* Pending: waiting on you, so it flies the same rust pennant a hunter does. */
+.card[data-state="pending"] .card-state {
+  color: var(--rust);
+  font-size: 12cqw;
+}
+
+.card-flare {
+  position: absolute;
+  right: 9%;
+  top: 2%;
+  width: 21cqw;
+  aspect-ratio: 286 / 512;
+  background: url("../../art/awaiting-flare.png") center / contain no-repeat;
+  transform: rotate(8deg);
+}
+
+/* Sealed: a second wax seal over the nail, and the card sits in shadow. */
+.card[data-state="sealed"] {
+  filter: drop-shadow(1px 2px 1px rgb(0 0 0 / 0.45)) brightness(0.72);
+}
+
+.card[data-state="sealed"] .card-state {
+  font-style: italic;
+}
+
+.card-seal {
+  position: absolute;
+  left: 50.3%;
+  top: 12.7%;
+  width: 21%;
+  aspect-ratio: 1;
+  background: url("../../art/contract-card.png") 80.5% 84.7% / 510% auto no-repeat;
+  clip-path: circle(47%);
+  transform: translate(-50%, -50%) rotate(-24deg);
+}

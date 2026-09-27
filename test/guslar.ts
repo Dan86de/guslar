@@ -107,3 +107,22 @@ export async function waitFor<T>(read: () => T | undefined, what: string, timeou
     await new Promise((resolve) => setTimeout(resolve, 25))
   }
 }
+
+/** Follows the broadcast as an open map does, until `until` holds for a world it received. */
+export function awaitWorld(url: string, until: (world: WorldState) => boolean, timeoutMs = 8000): Promise<WorldState> {
+  const socket = new WebSocket(new URL("/ws", url).href.replace(/^http/, "ws"))
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      socket.close()
+      reject(new Error(`no broadcast world matched within ${timeoutMs} ms`))
+    }, timeoutMs)
+    socket.once("error", reject)
+    socket.on("message", (data: Buffer) => {
+      const message = JSON.parse(data.toString()) as ServerMessage
+      if (!until(message.world)) return
+      clearTimeout(timer)
+      socket.close()
+      resolve(message.world)
+    })
+  })
+}

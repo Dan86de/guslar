@@ -51,3 +51,35 @@ export function fitMap(width: number, height: number): View {
   const centreY = (MUST_SHOW.top + MUST_SHOW.bottom) / 2
   return { scale, x: width / 2 - centreX * scale, y: height / 2 - centreY * scale }
 }
+
+/** Where a village sits, in map pixels: the centre of its art, and the art's width. */
+export type VillageSpot = { x: number; y: number; width: number }
+
+/** The widest a village is drawn, in map pixels, when its region has room. */
+const VILLAGE_WIDTH = 290
+
+/**
+ * Lays a region's villages out in rows of up to three, below its plaque, shrinking them
+ * as there are more so they all stay inside the painted region. `aspect` is the village
+ * art's height over its width; each village keeps room below it for its own name.
+ */
+export function villageSpots(slot: RegionSlot, count: number, aspect: number): VillageSpot[] {
+  if (count === 0) return []
+  const area = SLOT_AREAS[slot]
+  const cols = Math.min(count, 3)
+  const rows = Math.ceil(count / cols)
+  const pitchX = 1.15
+  const pitchY = aspect + 0.3
+  const width = Math.min(VILLAGE_WIDTH, (area.rx * 1.5) / (cols * pitchX), (area.ry * 1.25) / (rows * pitchY))
+  const centreY = area.y + area.ry * 0.2
+  return Array.from({ length: count }, (_, index) => {
+    const row = Math.floor(index / cols)
+    const inRow = Math.min(cols, count - row * cols)
+    const col = index - row * cols
+    return {
+      x: area.x + (col - (inRow - 1) / 2) * width * pitchX,
+      y: centreY + (row - (rows - 1) / 2) * width * pitchY,
+      width,
+    }
+  })
+}
