@@ -1,5 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { request } from "node:http"
 import path from "node:path"
+import WebSocket from "ws"
 import { afterEach, describe, expect, it } from "vitest"
 import { failGuslar, fixtures, receiveWorld, startGuslar, tempDir, waitFor, type Running } from "./guslar.js"
 
@@ -58,6 +60,36 @@ describe("opening the world", () => {
       ["mines", "fog"],
       ["ruins", "fog"],
     ])
+  })
+
+  it("shows the world only to its own map: not to another site, nor through a rebound name", async () => {
+    guslar = await startGuslar(["--no-open", "--world", worldFile])
+    const url = new URL(guslar.url)
+    const ws = url.href.replace(/^http/, "ws") + "ws"
+    const opens = (options: WebSocket.ClientOptions) =>
+      new Promise<number>((resolve) => {
+        const socket = new WebSocket(ws, options)
+        socket.once("open", () => {
+          socket.close()
+          resolve(101)
+        })
+        socket.once("unexpected-response", (_req, res) => resolve(res.statusCode ?? 0))
+      })
+    expect(await opens({ origin: url.origin })).toBe(101)
+    expect(await opens({ origin: "https://evil.example" })).toBe(403)
+    expect(await opens({ headers: { host: `evil.example:${url.port}` } })).toBe(403)
+
+    const read = (host?: string) =>
+      new Promise<number>((resolve, reject) => {
+        const req = request(new URL("/api/world", url), { headers: host ? { host } : {} }, (res) => {
+          res.resume()
+          resolve(res.statusCode ?? 0)
+        })
+        req.once("error", reject)
+        req.end()
+      })
+    expect(await read()).toBe(200)
+    expect(await read(`evil.example:${url.port}`)).toBe(403)
   })
 
   it("reads ~/.guslar/world.json by default, and a missing one is a world all under fog", async () => {

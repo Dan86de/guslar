@@ -144,6 +144,19 @@ describe("sending a hunter on a ready contract", () => {
     expect(claudeEvents(guslar).filter((e) => e.started)).toHaveLength(2)
   })
 
+  it("sends one hunter when two takes on a village arrive together", async () => {
+    const bog = bogwater()
+    guslar = await startGuslar(["--no-open", "--world", worldOf([{ slot: "forest", repo: bog.repo }])])
+    await receiveWorld(guslar.url)
+
+    const results = await Promise.all([take(guslar, S3), take(guslar, { ...S3, permissionMode: "default" })])
+    expect(results.map((r) => r.status).sort()).toEqual([201, 409])
+    expect((await receiveWorld(guslar.url)).hunters).toHaveLength(1)
+    const running = guslar
+    await waitFor(() => (claudeEvents(running).some((e) => e.stdin) ? true : undefined), "the claude to start")
+    expect(claudeEvents(guslar).filter((e) => e.started)).toHaveLength(1)
+  })
+
   it("refuses a contract that is not ready, and starts nothing", async () => {
     const bog = bogwater()
     guslar = await startGuslar(["--no-open", "--world", worldOf([{ slot: "forest", repo: bog.repo }])])

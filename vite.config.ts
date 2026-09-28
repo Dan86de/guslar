@@ -10,9 +10,10 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
   },
   server: {
+    // Guslar answers only its own origin, so the dev map reaches it as that origin.
     proxy: {
-      "/api": "http://127.0.0.1:4747",
-      "/ws": { target: "ws://127.0.0.1:4747", ws: true },
+      "/api": { target: "http://127.0.0.1:4747", changeOrigin: true, headers: { origin: "http://127.0.0.1:4747" } },
+      "/ws": { target: "ws://127.0.0.1:4747", ws: true, changeOrigin: true, headers: { origin: "http://127.0.0.1:4747" } },
     },
   },
 })

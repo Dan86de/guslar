@@ -330,6 +330,8 @@ export class Hunters {
       terminal?: Promise<Terminal | Error>
     }
   >()
+  /** The places, `<slot>/<village slug>`, a hunter is being sent to while its claude starts. */
+  private readonly sending = new Set<string>()
   /** The sessions started outside Guslar, by their session id. */
   private readonly outsiders = new Map<string, Outsider>()
   private readonly listeners = new Set<() => void>()
@@ -396,11 +398,31 @@ export class Hunters {
     const around = this.list().filter(
       (h) => h.slot === request.slot && h.village === village?.slug && !(h.outside && h.village === undefined),
     )
+    const title = village?.title ?? region.name
     const holder = around.find((h) => !isReturned(h))
-    if (holder) return { status: 409, error: refusalOf({ title: village?.title ?? region.name }, holder) }
+    if (holder) return { status: 409, error: refusalOf({ title }, holder) }
+    // A hunter being sent holds its place too, while its claude starts.
+    const place = `${request.slot}/${village?.slug ?? ""}`
+    if (this.sending.has(place)) return { status: 409, error: `${title} refuses a second hunter: one is being sent already.` }
     const unfit = unfitFor(rite, village, contract)
     if (unfit) return { status: 409, error: unfit }
+    this.sending.add(place)
+    try {
+      return await this.send(request, rite, region, village, contract, around)
+    } finally {
+      this.sending.delete(place)
+    }
+  }
 
+  /** Starts a hunter's claude on a rite the world lets it take, and puts the hunter on the map. */
+  private async send(
+    request: TakeRequest,
+    rite: Rite,
+    region: Extract<SlotState, { kind: "region" }>,
+    village: Village | undefined,
+    contract: Contract | undefined,
+    around: Hunter[],
+  ): Promise<TakeResult> {
     const id = randomUUID()
     const child = spawn(this.claude, claudeArgs(request.permissionMode), {
       cwd: region.repo,

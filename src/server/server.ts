@@ -246,6 +246,11 @@ export async function startServer(options: {
 
   const http: Server = createServer((req, res) => {
     if (req.url === "/api/world") {
+      // The world holds every hunter's journal: only this machine, by a name the server answers to, may read it.
+      if (!fromOwnOrigin(req)) {
+        sendJson(res, 403, { error: "Only the map this Guslar serves may read the world." })
+        return
+      }
       sendJson(res, 200, world())
       return
     }
@@ -314,11 +319,16 @@ export async function startServer(options: {
   }
 
   /**
-   * `/ws` follows the world. A hunter's terminal socket runs keys in a program on this machine,
+   * `/ws` follows the world, for the map this server serves. A hunter's terminal socket runs keys in a program on this machine,
    * so only the map this server serves may open one, and only onto a terminal that is open.
    */
   http.on("upgrade", (req: IncomingMessage, socket: Socket, head: Buffer) => {
     if (req.url === "/ws") {
+      // Any page may open a WebSocket to this machine, and the world holds every hunter's journal.
+      if (!fromOwnOrigin(req)) {
+        refuseUpgrade(socket, 403, "Forbidden")
+        return
+      }
       sockets.handleUpgrade(req, socket, head, (ws) => sockets.emit("connection", ws, req))
       return
     }

@@ -461,10 +461,11 @@ button.plaque:focus-visible {
   text-wrap: balance;
 }
 
+/* Its foot rests on the bottom plank, just inside the frame, and a longer refusal grows up the board. */
 .board-refusal {
   position: absolute;
   left: 50%;
-  top: 91%;
+  top: 92.2%;
   width: max-content;
   max-width: 78%;
   margin: 0;
@@ -481,7 +482,7 @@ button.plaque:focus-visible {
     inset 0 0 0 3px var(--bone),
     inset 0 0 0 4px rgb(138 59 42 / 0.5),
     2px 3px 0 rgb(29 24 18 / 0.45);
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -100%);
 }
 
 /* The chooser: a parchment over the board, one row per permission mode. */
