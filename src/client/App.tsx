@@ -2,8 +2,11 @@ import { lazy, Suspense, useState } from "react"
 import { Journal } from "./Journal.js"
 import { NoticeBoard } from "./NoticeBoard.js"
 import { Prompts } from "./Prompts.js"
+import { RegionRites } from "./RegionRites.js"
 import { useWorld } from "./useWorld.js"
 import { WorldMap, type VillageRef } from "./WorldMap.js"
+import { boundOf } from "./bound.js"
+import type { RegionSlot } from "../shared/world.js"
 
 // The terminal brings a whole terminal emulator, so it loads only once one is opened.
 const TerminalView = lazy(() => import("./TerminalView.js").then((module) => ({ default: module.TerminalView })))
@@ -13,16 +16,17 @@ export function App() {
   const [opened, setOpened] = useState<VillageRef>()
   const [reading, setReading] = useState<string>()
   const [watching, setWatching] = useState<string>()
+  const [performing, setPerforming] = useState<RegionSlot>()
 
   // The board follows the live world; it goes when its village does.
   const region = world?.slots.find((slot) => slot.slot === opened?.slot)
   const village = region?.kind === "region" ? region.villages.find((v) => v.slug === opened?.slug) : undefined
 
+  // So do a region's rites: they go when the region does.
+  const riteRegion = world?.slots.find((slot) => slot.slot === performing)
+
   // So does the journal: it goes when its hunter leaves the map.
   const hunter = world?.hunters.find((h) => h.id === reading)
-  const hunterRegion = world?.slots.find((slot) => slot.slot === hunter?.slot)
-  const hunterVillage =
-    hunterRegion?.kind === "region" ? hunterRegion.villages.find((v) => v.slug === hunter?.village) : undefined
 
   // And the terminal: it goes when its hunter does, and the server hangs it up.
   const terminalHunter = world?.hunters.find((h) => h.id === watching)
@@ -30,7 +34,7 @@ export function App() {
   return (
     <main>
       <h1 className="visually-hidden">Guslar</h1>
-      <WorldMap world={world} onOpenVillage={setOpened} onOpenHunter={setReading} />
+      <WorldMap world={world} onOpenVillage={setOpened} onOpenHunter={setReading} onOpenRegion={setPerforming} />
       {world && <Prompts world={world} />}
       {opened && village && (
         <NoticeBoard
@@ -41,12 +45,20 @@ export function App() {
           onClose={() => setOpened(undefined)}
         />
       )}
-      {hunter && (
+      {riteRegion?.kind === "region" && (
+        <RegionRites
+          key={riteRegion.slot}
+          slot={riteRegion.slot}
+          name={riteRegion.name}
+          hunters={world?.hunters.filter((h) => h.slot === riteRegion.slot && h.village === undefined) ?? []}
+          onClose={() => setPerforming(undefined)}
+        />
+      )}
+      {world && hunter && (
         <Journal
           key={hunter.id}
           hunter={hunter}
-          contractTitle={hunterVillage?.contracts.find((c) => c.id === hunter.contract)?.title}
-          villageTitle={hunterVillage?.title ?? hunter.village}
+          bound={boundOf(world, hunter)}
           onOpenTerminal={() => setWatching(hunter.id)}
           onClose={() => setReading(undefined)}
         />

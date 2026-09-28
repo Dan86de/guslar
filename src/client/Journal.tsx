@@ -66,14 +66,13 @@ function Entry({ entry, hunter }: { entry: JournalEntry; hunter: Hunter }) {
  */
 export function Journal({
   hunter,
-  contractTitle,
-  villageTitle,
+  bound,
   onOpenTerminal,
   onClose,
 }: {
   hunter: Hunter
-  contractTitle: string | undefined
-  villageTitle: string
+  /** What the hunter was sent for, and where. */
+  bound: { what: string; where: string }
   onOpenTerminal: () => void
   onClose: () => void
 }) {
@@ -136,8 +135,7 @@ export function Journal({
           {hunter.name}
         </h2>
         <p className="journal-bound">
-          {hunter.contract}
-          {contractTitle ? ` ${contractTitle}` : ""}, <span className="journal-village">{villageTitle}</span>
+          {bound.what}, <span className="journal-village">{bound.where}</span>
         </p>
         <div className="journal-status">
           <p className="journal-state">{HUNTER_STATE_NAMES[hunter.state]}</p>

@@ -114,7 +114,12 @@ describe("open in terminal", () => {
       args: ["--resume", SESSION, "--permission-mode", "acceptEdits"],
       url: running.url,
     })
-    expect(recorded(running)).toContainEqual({ pid: resumed.pid, tty: { term: "xterm-256color" } })
+    // It records that it runs in a terminal just after it records its start, so wait for that line.
+    const tty = await waitFor(
+      () => recorded(running).find((entry) => entry.pid === resumed.pid && entry.tty),
+      "the resumed claude to see its terminal",
+    )
+    expect(tty).toEqual({ pid: resumed.pid, tty: { term: "xterm-256color" } })
 
     // What it wrote reaches a map, and what the map types reaches it.
     const terminal = await attach(running, hunter.id)

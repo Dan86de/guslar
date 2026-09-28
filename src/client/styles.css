@@ -56,7 +56,24 @@ main {
     inset 0 0 0 3px var(--bone),
     inset 0 0 0 4px rgb(36 28 20 / 0.45),
     2px 3px 0 rgb(29 24 18 / 0.35);
-  pointer-events: none;
+}
+
+/* A claimed region's plaque opens its rites. */
+button.plaque {
+  margin: 0;
+  font-family: inherit;
+  line-height: normal;
+  cursor: pointer;
+}
+
+button.plaque:hover,
+button.plaque:focus-visible {
+  border-color: var(--rust);
+  box-shadow:
+    inset 0 0 0 3px var(--bone),
+    inset 0 0 0 4px rgb(138 59 42 / 0.6),
+    2px 3px 0 rgb(29 24 18 / 0.35);
+  outline: none;
 }
 
 .notice {
@@ -220,6 +237,40 @@ main {
   font-size: 2.2cqh;
   background: var(--bone);
   border: 1px solid var(--ink);
+}
+
+.board-note p {
+  margin: 0;
+}
+
+/* The hunter posting the contracts, and the rite that sends one. */
+.board-note .board-hunter {
+  margin-top: 0.6em;
+  color: var(--rust);
+  font-style: italic;
+}
+
+.board-rite {
+  display: block;
+  margin: 0.9em 0 0 auto;
+  padding: 0.2em 0.9em 0.3em;
+  color: var(--bone);
+  font: inherit;
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 0 0 1.5px var(--ink),
+    inset 0 0 0 2.5px rgb(217 203 168 / 0.55),
+    1px 2px 0 rgb(29 24 18 / 0.35);
+  cursor: pointer;
+}
+
+.board-rite:hover,
+.board-rite:focus-visible {
+  background: var(--rust);
+  border-color: var(--rust);
+  outline: none;
 }
 
 .cards {
@@ -552,6 +603,13 @@ main {
 .chooser-cancel:focus-visible {
   background: var(--rust);
   outline: none;
+}
+
+/* A region's rites: the chooser's parchment, one row per rite, its skill at the right. */
+.rites-hunter {
+  margin: 10px 0 0;
+  color: var(--rust);
+  font-style: italic;
 }
 
 /* Hunters on the map: the figure is painted on the canvas; this is its name, over its head. */

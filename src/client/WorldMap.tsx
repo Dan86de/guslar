@@ -11,9 +11,10 @@ import clearedUrl from "../../art/village-cleared.png"
 import contractsUrl from "../../art/village-contracts.png"
 import mapUrl from "../../art/world-map.png"
 import type { RegionSlot, VillageStage, WorldState } from "../shared/world.js"
+import { outFor } from "./bound.js"
 import { cutOutAll } from "./cutout.js"
 import { featheredMap, FogLayer } from "./fog.js"
-import { fitMap, hunterGround, labelAnchor, MAP_SIZE, villageSpots, type View } from "./geometry.js"
+import { fitMap, hunterGround, labelAnchor, MAP_SIZE, regionGround, villageSpots, type View } from "./geometry.js"
 import { HUNTER_STATE_NAMES } from "./hunterStates.js"
 import { HunterLayer, isOut, POSES, RIDE_MS, type HunterPlace, type Pose } from "./hunters.js"
 
@@ -47,16 +48,23 @@ const POSE_ART: Record<Pose, string> = {
   trophy: trophyUrl,
 }
 
-/** Where every hunter in the world stands on the map: beside its village, out in the field or back home. */
+/**
+ * Where every hunter in the world stands on the map: beside its village, or by its region's plaque
+ * for a rite of the region's own, out in the field or back home.
+ */
 function hunterPlaces(world: WorldState, aspect: number): HunterPlace[] {
   return world.hunters.flatMap((hunter) => {
     const region = world.slots.find((slot) => slot.slot === hunter.slot)
     if (region?.kind !== "region") return []
+    if (hunter.village === undefined) {
+      const ground = regionGround(region.slot, aspect)
+      return [{ hunter, at: isOut(hunter.state) ? ground.field : ground.home, height: ground.height, outward: ground.outward }]
+    }
     const index = region.villages.findIndex((v) => v.slug === hunter.village)
     const spot = villageSpots(region.slot, region.villages.length, aspect)[index]
     if (!spot) return []
     const ground = hunterGround(spot, aspect)
-    return [{ hunter, at: isOut(hunter.state) ? ground.field : ground.home, height: ground.height }]
+    return [{ hunter, at: isOut(hunter.state) ? ground.field : ground.home, height: ground.height, outward: ground.outward }]
   })
 }
 
@@ -80,11 +88,14 @@ export function WorldMap({
   world,
   onOpenVillage,
   onOpenHunter,
+  onOpenRegion,
 }: {
   world: WorldState | undefined
   onOpenVillage: (village: VillageRef) => void
   /** Opens a hunter's journal, by the hunter's id. */
   onOpenHunter: (id: string) => void
+  /** Opens a region's rites, by its slot. */
+  onOpenRegion: (slot: RegionSlot) => void
 }) {
   const host = useRef<HTMLDivElement>(null)
   const [scene, setScene] = useState<Scene>()
@@ -226,10 +237,10 @@ export function WorldMap({
         <>
           <ul className="slots" aria-label="Regions">
             {world.slots.map((slot) => {
-              const anchor = labelAnchor(slot.slot)
-              const style = { left: view.x + anchor.x * view.scale, top: view.y + anchor.y * view.scale }
+              // A region's plaque is painted by its button under Region rites, after the villages
+              // and hunters, so Tab reaches a village first; this says it in its slot's place.
               return slot.kind === "region" ? (
-                <li key={slot.slot} className="plaque" style={style} data-slot={slot.slot} data-repo={slot.repo}>
+                <li key={slot.slot} className="visually-hidden" data-slot={slot.slot} data-repo={slot.repo}>
                   {slot.name}
                   <span className="visually-hidden">{`, ${slotName(slot.slot)}`}</span>
                 </li>
@@ -242,6 +253,26 @@ export function WorldMap({
           </ul>
           <VillageList world={world} view={view} aspect={scene.villageAspect} onOpen={onOpenVillage} />
           <HunterList world={world} view={view} aspect={scene.villageAspect} onOpen={onOpenHunter} />
+          <ul className="slots" aria-label="Region rites">
+            {world.slots.map((slot) => {
+              if (slot.kind !== "region") return null
+              const anchor = labelAnchor(slot.slot)
+              const style = { left: view.x + anchor.x * view.scale, top: view.y + anchor.y * view.scale }
+              return (
+                <li key={slot.slot}>
+                  <button
+                    type="button"
+                    className="plaque"
+                    style={style}
+                    aria-label={`Rites of ${slot.name}`}
+                    onClick={() => onOpenRegion(slot.slot)}
+                  >
+                    {slot.name}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
         </>
       )}
     </div>
@@ -297,7 +328,7 @@ function VillageList({
 
 /**
  * Each hunter's name over its painted figure's head, following it as it rides, with its state and
- * contract said in words for anyone who cannot see the pose. The name and the figure under it
+ * what it is out for said in words for anyone who cannot see the pose. The name and the figure under it
  * are one button, named by the hunter, which opens its journal.
  */
 function HunterList({
@@ -316,8 +347,6 @@ function HunterList({
   return (
     <ul className="slots" aria-label="Hunters">
       {places.map(({ hunter, at, height }) => {
-        const region = world.slots.find((slot) => slot.slot === hunter.slot)
-        const village = region?.kind === "region" ? region.villages.find((v) => v.slug === hunter.village) : undefined
         const style = {
           left: view.x + at.x * view.scale,
           top: view.y + (at.y - height) * view.scale,
@@ -336,7 +365,7 @@ function HunterList({
               <span className="hunter-name">{hunter.name}</span>
             </button>
             <span id={`hunter-${hunter.id}`} className="visually-hidden">
-              {` , ${HUNTER_STATE_NAMES[hunter.state]} on ${hunter.contract} of ${village?.title ?? hunter.village}`}
+              {` , ${HUNTER_STATE_NAMES[hunter.state]}${outFor(world, hunter)}`}
             </span>
           </li>
         )

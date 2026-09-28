@@ -20,8 +20,11 @@ const POSE_OF: Record<HunterState, Pose> = {
 /** How long a hunter takes to ride between its village and its hunting ground, in ms. */
 export const RIDE_MS = 2000
 
-/** A hunter's ground, as the map lays it out: where it stands now and how tall it is drawn. */
-export type HunterPlace = { hunter: Hunter; at: Footing; height: number }
+/**
+ * A hunter's ground, as the map lays it out: where it stands now, how tall it is drawn, and
+ * `outward`, the side its field lies on from its home: 1 to the right, -1 to the left.
+ */
+export type HunterPlace = { hunter: Hunter; at: Footing; height: number; outward: 1 | -1 }
 
 /** A returned hunter stands at home, the rest out in the field. */
 export function isOut(state: HunterState): boolean {
@@ -44,14 +47,14 @@ type Figure = {
   to: Footing
   started: number
   height: number
-  /** 1 faces right, away from its village, while out; -1 faces the village once back. */
+  /** 1 faces right, -1 left: outward, away from its home, while out, and back towards it once returned. */
   facing: 1 | -1
 }
 
 /**
  * The hunters on the map, one painted figure each, in the pose of its state. A figure that
  * changes ground rides there over RIDE_MS rather than jumping, facing the way it goes: out
- * to the field facing away from its village, back home facing it.
+ * to the field facing away from its village or its region's plaque, back home facing it.
  */
 export class HunterLayer {
   readonly container = new Container()
@@ -77,7 +80,7 @@ export class HunterLayer {
 
   show(places: HunterPlace[]): void {
     const seen = new Set<string>()
-    for (const { hunter, at, height } of places) {
+    for (const { hunter, at, height, outward } of places) {
       seen.add(hunter.id)
       let figure = this.figures.get(hunter.id)
       if (!figure) {
@@ -96,7 +99,7 @@ export class HunterLayer {
         figure.started = this.clock
       }
       figure.height = height
-      figure.facing = isOut(hunter.state) ? 1 : -1
+      figure.facing = isOut(hunter.state) ? outward : outward === 1 ? -1 : 1
       figure.sprite.texture = this.poses.get(POSE_OF[hunter.state]) ?? Texture.EMPTY
       figure.flare.visible = hunter.state === "awaiting-you"
       this.place(figure)

@@ -62,7 +62,8 @@ export type PermissionMode = (typeof PERMISSION_MODES)[number]
  * Where a hunter is, read from its session's stream-json: `riding-out` until the session
  * first answers, `hunting` while it works, `awaiting-you` while it asks you something or
  * waits on a permission, `returned-trophy` once its contract's commit lands (done or pending
- * sign-off), and `returned-wounded` when its turn ends without one.
+ * sign-off; done, for an inspection), and `returned-wounded` when its turn ends without one. A
+ * rite with no contract returns with a trophy when its turn ends well, and wounded when it fails.
  */
 export const HUNTER_STATES = ["riding-out", "hunting", "awaiting-you", "returned-trophy", "returned-wounded"] as const
 
@@ -84,15 +85,46 @@ export type JournalEntry =
   | { kind: "tool"; tool: string; input: string }
   | { kind: "result"; text: string; error: boolean }
 
-/** A Claude Code session Guslar started on a contract, while its process runs. */
+/**
+ * The skill a hunter is sent with. `implement-slice` hunts a ready contract; the other rites are
+ * performed from a village (`write-slices` posts its contracts, `sign-off` inspects the trophy of a
+ * pending one) or from a region (`interview`, `write-spec`, `make-verify`).
+ */
+export const RITES = ["implement-slice", "interview", "write-spec", "write-slices", "make-verify", "sign-off"] as const
+
+export type Rite = (typeof RITES)[number]
+
+/** Where each rite is performed: on a contract, in a village, or in a region. */
+export const RITE_GROUND: Record<Rite, "contract" | "village" | "region"> = {
+  "implement-slice": "contract",
+  "sign-off": "contract",
+  "write-slices": "village",
+  interview: "region",
+  "write-spec": "region",
+  "make-verify": "region",
+}
+
+/** Each rite as the world names it. */
+export const RITE_NAMES: Record<Rite, string> = {
+  "implement-slice": "Take the contract",
+  interview: "Hear the villagers",
+  "write-spec": "Draft the bounty",
+  "write-slices": "Post contracts",
+  "make-verify": "Set the proof of kill",
+  "sign-off": "Inspect the trophy",
+}
+
+/** A Claude Code session Guslar started on a rite, while its process runs. */
 export type Hunter = {
   /** Given to the session as `GUSLAR_HUNTER_ID`, so its hooks and stream join up. */
   id: string
   name: string
-  /** The region, village and contract it rides for. */
+  /** The skill it was sent with. */
+  rite: Rite
+  /** The region it rides in, and the village and contract it rides for, when its rite has them. */
   slot: RegionSlot
-  village: string
-  contract: string
+  village?: string
+  contract?: string
   permissionMode: PermissionMode
   state: HunterState
   /** The conversation so far, oldest first. */
@@ -134,8 +166,17 @@ export type HookSighting = { event: string; tool?: string }
 /** What the server broadcasts to every open map. Slots are always in REGION_SLOTS order. */
 export type WorldState = { slots: SlotState[]; hunters: Hunter[] }
 
-/** What a map posts to `/api/hunters` to send a hunter on a ready contract. */
-export type TakeRequest = { slot: RegionSlot; village: string; contract: string; permissionMode: PermissionMode }
+/**
+ * What a map posts to `/api/hunters` to send a hunter: on a ready contract when it names no rite,
+ * or else on that rite, with the village and contract the rite is performed on.
+ */
+export type TakeRequest = {
+  slot: RegionSlot
+  rite?: Rite
+  village?: string
+  contract?: string
+  permissionMode: PermissionMode
+}
 
 /** What a map posts to `/api/hunters/<id>/replies` to write to a hunter in its journal. */
 export type ReplyRequest = { text: string }
@@ -152,15 +193,34 @@ export type HookRequest = {
 /** What Guslar answers the hook on a `PermissionRequest`: your decision, or none when there is none to give. */
 export type HookReply = { heard: boolean; decision?: PermissionAnswer }
 
-/** A village takes one hunter at a time; this is what it says to a second one. */
-export function refusalOf(village: Pick<Village, "title">, holder: Pick<Hunter, "name" | "contract">): string {
-  return `${village.title} refuses a second hunter: ${holder.name} is out on ${holder.contract}.`
+/** What a hunter is out for, as a phrase after "out": `on S3`, or `to post contracts`. */
+export function errandOf(hunter: Pick<Hunter, "rite" | "contract">): string {
+  switch (hunter.rite) {
+    case "implement-slice":
+      return `on ${hunter.contract ?? "a contract"}`
+    case "sign-off":
+      return `to inspect the trophy of ${hunter.contract ?? "a contract"}`
+    default:
+      return `to ${RITE_NAMES[hunter.rite].toLowerCase()}`
+  }
+}
+
+/**
+ * A village takes one hunter at a time, and so does a region for its own rites; this is what
+ * either says to a second one.
+ */
+export function refusalOf(place: { title: string }, holder: Pick<Hunter, "name" | "rite" | "contract">): string {
+  return `${place.title} refuses a second hunter: ${holder.name} is out ${errandOf(holder)}.`
 }
 
 export type ServerMessage = { type: "world"; world: WorldState }
 
 export function isPermissionMode(value: unknown): value is PermissionMode {
   return typeof value === "string" && (PERMISSION_MODES as readonly string[]).includes(value)
+}
+
+export function isRite(value: unknown): value is Rite {
+  return typeof value === "string" && (RITES as readonly string[]).includes(value)
 }
 
 export function isRegionSlot(value: unknown): value is RegionSlot {

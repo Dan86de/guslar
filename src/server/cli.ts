@@ -101,7 +101,9 @@ async function main(): Promise<void> {
   const initial = await reader.read()
 
   const hunters = new Hunters(process.env.GUSLAR_CLAUDE?.trim() || "claude", (hunter) =>
-    reader.contract(hunter.slot, hunter.village, hunter.contract),
+    hunter.village === undefined || hunter.contract === undefined
+      ? Promise.resolve(undefined)
+      : reader.contract(hunter.slot, hunter.village, hunter.contract),
   )
 
   let server

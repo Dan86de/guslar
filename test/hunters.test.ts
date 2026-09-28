@@ -88,6 +88,7 @@ describe("sending a hunter on a ready contract", () => {
       {
         id: body.hunter?.id,
         name: "Wojmir",
+        rite: "implement-slice",
         slot: "forest",
         village: "drain-the-bog",
         contract: "S3",

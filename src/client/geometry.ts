@@ -94,16 +94,41 @@ export function villageSpots(slot: RegionSlot, count: number, aspect: number): V
 export type Footing = { x: number; y: number }
 
 /**
+ * A hunter's ground: `home`, where it comes back to, `field`, where it hunts, how tall it is
+ * drawn, and `outward`, the side the field lies on from home (1 right, -1 left).
+ */
+export type Ground = { home: Footing; field: Footing; height: number; outward: 1 | -1 }
+
+/**
  * Where a village's hunter stands, and how tall it is drawn, from the village's spot and its
  * art's aspect: `home` at the village's right edge, where it comes back to, and `field` out to
  * the right of it, where it hunts. Both stay inside the village's share of the region, clear
  * of the next village in its row and of the village's own name under it.
  */
-export function hunterGround(spot: VillageSpot, aspect: number): { home: Footing; field: Footing; height: number } {
+export function hunterGround(spot: VillageSpot, aspect: number): Ground {
   const height = spot.width * aspect
   return {
     home: { x: spot.x + spot.width * 0.74, y: spot.y + height * 0.42 },
     field: { x: spot.x + spot.width * 0.93, y: spot.y + height * 0.2 },
     height: height * 0.8,
+    outward: 1,
+  }
+}
+
+/**
+ * Where a hunter sent on a region's own rite stands, and how tall it is drawn: beside the region's
+ * plaque, on its left, as by a signpost, clear of the plaque and above the villages below it.
+ * `home`, where it comes back to, is nearer the plaque, and `field`, where it hunts, further out.
+ * `aspect` is the village art's, so it stands as tall as a village's hunter.
+ */
+export function regionGround(slot: RegionSlot, aspect: number): Ground {
+  const area = SLOT_AREAS[slot]
+  const plaque = labelAnchor(slot)
+  const height = VILLAGE_WIDTH * aspect * 0.8
+  return {
+    home: { x: plaque.x - area.rx * 0.55, y: plaque.y + height * 0.55 },
+    field: { x: plaque.x - area.rx * 0.7, y: plaque.y + height * 0.5 },
+    height,
+    outward: -1,
   }
 }

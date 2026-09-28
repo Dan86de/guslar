@@ -8,6 +8,7 @@ It draws the repos listed in a `world.json` as regions of one painted map, and c
 Every spec in a region's repo is a village, and each village's notice board carries that spec's contracts and their states.
 Each village is painted at its stage: bounty drafted, contracts posted or cleared.
 A ready contract can be taken, which sends a hunter: a `claude` session running `/implement-slice` on it, one per village at a time.
+The other rites of the pipeline send hunters too: from a region's plaque (`/interview`, `/write-spec`, `/make-verify`), from a village with no contracts (`/write-slices`), and from a pending contract (`/implement-slice --signoff`).
 Each hunter stands on the map beside its village in the pose of its state, and comes back with a trophy once its contract's commit lands, or wounded when its session's turn ends without one.
 Each hunter keeps a journal of its session, opened from its figure on the map, where you read it as it goes and write back to it.
 From the journal, a hunter's session can be resumed in a real terminal along the map's foot, when the journal is not enough.
@@ -52,6 +53,7 @@ No implementation details: only user paths, handles, commands, state and what pr
 - [Read a village's notice board](./villages.md): every spec is a village on the map, and its board shows each contract's title, autonomy and state from the `slices/<slug>` trailers.
 - [See each village's stage](./village-stages.md): each village is painted as a bounty drafted, contracts posted or cleared, and the page says which.
 - [Take a contract](./take-a-contract.md): a ready contract is taken with a chosen permission mode, a hunter rides out on it, and its village refuses a second one.
+- [Perform a rite](./perform-a-rite.md): a region's plaque sends hunters to hear the villagers, draft the bounty or set the proof of kill, a village with no contracts sends one to post them, and a pending contract one to inspect its trophy, each with that skill in the region's repo.
 - [Follow a hunter](./follow-a-hunter.md): each hunter rides out, hunts, awaits you, and returns with a trophy or wounded, on the map, on its contract's card and in the broadcast.
 - [Talk to a hunter](./talk-to-a-hunter.md): a hunter's journal shows its session's messages and tool calls as they arrive, and sends what you type as your next message.
 - [Open a hunter in a terminal](./open-in-terminal.md): the journal's `Open in terminal` resumes the hunter's session with `claude --resume` in a terminal on the map, which is read and typed into like any other.

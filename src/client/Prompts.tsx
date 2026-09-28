@@ -1,3 +1,4 @@
+import { boundOf } from "./bound.js"
 import { useId, useState, type SyntheticEvent } from "react"
 import type { Hunter, PermissionAnswer, PermissionPrompt, WorldState } from "../shared/world.js"
 
@@ -113,10 +114,8 @@ export function Prompts({ world }: { world: WorldState }) {
   return (
     <div className="petitions" aria-label="Requests" role="region">
       {asking.map((hunter) => {
-        const region = world.slots.find((slot) => slot.slot === hunter.slot)
-        const village = region?.kind === "region" ? region.villages.find((v) => v.slug === hunter.village) : undefined
-        const title = village?.contracts.find((c) => c.id === hunter.contract)?.title
-        const bound = `${hunter.contract}${title ? ` ${title}` : ""}, ${village?.title ?? hunter.village}`
+        const { what, where } = boundOf(world, hunter)
+        const bound = `${what}, ${where}`
         return hunter.prompt && <Petition key={hunter.prompt.id} hunter={hunter} prompt={hunter.prompt} bound={bound} />
       })}
     </div>

@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import { createInterface } from "node:readline"
 import type {
+  Contract,
   ContractState,
   HookRequest,
   HookSighting,
@@ -10,10 +11,12 @@ import type {
   JournalEntry,
   PermissionAnswer,
   PermissionPrompt,
+  Rite,
   SlotState,
   TakeRequest,
+  Village,
 } from "../shared/world.js"
-import { isReturned, refusalOf } from "../shared/world.js"
+import { isReturned, refusalOf, RITE_GROUND } from "../shared/world.js"
 import { Terminal } from "./terminals.js"
 
 /** Names handed out in order, the first one no hunter out is using. Original, from Slavic naming, none from the Witcher. */
@@ -96,9 +99,43 @@ export function claudeArgs(permissionMode: Hunter["permissionMode"]): string[] {
 /** Reads a hunter's contract as it stands in its repo now, or undefined when it is gone. */
 export type ContractLookup = (hunter: Hunter) => Promise<ContractState | undefined>
 
-/** A contract whose commit has landed: done, or pending the user's sign-off. */
-function paid(state: ContractState | undefined): boolean {
-  return state === "done" || state === "pending"
+/**
+ * A contract whose rite is fulfilled: a hunt once its commit has landed, done or pending the
+ * user's sign-off, and an inspection once the sign-off has made it done.
+ */
+function paid(rite: Rite, state: ContractState | undefined): boolean {
+  return state === "done" || (rite === "implement-slice" && state === "pending")
+}
+
+/** A hunter back with its contract paid stays so, whatever its session says after. */
+function settled(hunter: Hunter): boolean {
+  return hunter.state === "returned-trophy" && hunter.contract !== undefined
+}
+
+/** Why a rite cannot be performed on what it names as the world stands, or undefined when it can. */
+function unfitFor(rite: Rite, village: Village | undefined, contract: Contract | undefined): string | undefined {
+  if (rite === "implement-slice" && contract && contract.state !== "ready") {
+    return `${contract.id} of ${village?.title} is ${contract.state}, not ready to take.`
+  }
+  if (rite === "sign-off" && contract && contract.state !== "pending") {
+    return `${contract.id} of ${village?.title} is ${contract.state}, not awaiting sign-off.`
+  }
+  if (rite === "write-slices" && village?.slices) return `${village.title} has its contracts posted already.`
+  return undefined
+}
+
+/** The slash command a hunter opens its session with, which runs its rite's skill. */
+function openingOf(rite: Rite, village: Village | undefined, contract: Contract | undefined): string {
+  switch (rite) {
+    case "implement-slice":
+      return `/implement-slice ${village?.slices} ${contract?.id}`
+    case "sign-off":
+      return `/implement-slice ${village?.slices} --signoff ${contract?.id}`
+    case "write-slices":
+      return `/write-slices ${village?.spec}`
+    default:
+      return `/${rite}`
+  }
 }
 
 type StreamMessage = {
@@ -181,7 +218,6 @@ export function journalOf(message: StreamMessage): JournalEntry[] {
  * about the hunt (hooks, init, rate limits, thinking tokens) leave it where it is.
  */
 export function afterMessage(state: HunterState, message: StreamMessage): HunterState | "turn-ended" {
-  if (state === "returned-trophy") return state
   switch (message.type) {
     case "assistant": {
       const content = Array.isArray(message.message?.content) ? (message.message.content as unknown[]) : []
@@ -257,23 +293,34 @@ export class Hunters {
     return () => this.listeners.delete(listener)
   }
 
-  /** Sends a hunter on a ready contract of the world as it stands in `slots`, or says why not. */
+  /**
+   * Sends a hunter on a rite, on a ready contract when the request names none, in the world as
+   * it stands in `slots`, or says why not. A village takes one hunter at a time, and so does a
+   * region for the rites performed in it rather than in one of its villages.
+   */
   async take(request: TakeRequest, slots: SlotState[]): Promise<TakeResult> {
+    const rite = request.rite ?? "implement-slice"
+    const ground = RITE_GROUND[rite]
     const region = slots.find((slot) => slot.slot === request.slot)
     if (region?.kind !== "region") return { status: 404, error: `No region stands in the ${request.slot} slot.` }
-    const village = region.villages.find((v) => v.slug === request.village)
-    if (!village) return { status: 404, error: `${region.name} has no village ${request.village}.` }
-    const contract = village.contracts.find((c) => c.id === request.contract)
-    if (!village.slices || !contract) {
-      return { status: 404, error: `${village.title} has no contract ${request.contract} posted.` }
+    let village: Village | undefined
+    let contract: Contract | undefined
+    if (ground !== "region") {
+      village = region.villages.find((v) => v.slug === request.village)
+      if (!village) return { status: 404, error: `${region.name} has no village ${request.village ?? "named"}.` }
+    }
+    if (ground === "contract") {
+      contract = village?.contracts.find((c) => c.id === request.contract)
+      if (!village?.slices || !contract) {
+        return { status: 404, error: `${village?.title} has no contract ${request.contract ?? "named"} posted.` }
+      }
     }
 
-    const inVillage = this.list().filter((h) => h.slot === request.slot && h.village === request.village)
-    const holder = inVillage.find((h) => !isReturned(h))
-    if (holder) return { status: 409, error: refusalOf(village, holder) }
-    if (contract.state !== "ready") {
-      return { status: 409, error: `${contract.id} of ${village.title} is ${contract.state}, not ready to take.` }
-    }
+    const around = this.list().filter((h) => h.slot === request.slot && h.village === village?.slug)
+    const holder = around.find((h) => !isReturned(h))
+    if (holder) return { status: 409, error: refusalOf({ title: village?.title ?? region.name }, holder) }
+    const unfit = unfitFor(rite, village, contract)
+    if (unfit) return { status: 409, error: unfit }
 
     const id = randomUUID()
     const child = spawn(this.claude, claudeArgs(request.permissionMode), {
@@ -287,15 +334,16 @@ export class Hunters {
     })
     if (started) return { status: 502, error: `Could not start ${this.claude}: ${started.message}` }
 
-    // A hunter back in this village makes way for the new one, and its name is free again.
-    for (const returned of inVillage) this.dismiss(returned.id)
-    const opening = `/implement-slice ${village.slices} ${contract.id}`
+    // A hunter back in this village or region makes way for the new one, and its name is free again.
+    for (const returned of around) this.dismiss(returned.id)
+    const opening = openingOf(rite, village, contract)
     const hunter: Hunter = {
       id,
       name: this.freeName(),
+      rite,
       slot: request.slot,
-      village: village.slug,
-      contract: contract.id,
+      ...(village ? { village: village.slug } : {}),
+      ...(contract ? { contract: contract.id } : {}),
       permissionMode: request.permissionMode,
       state: "riding-out",
       journal: [{ kind: "you", text: opening }],
@@ -483,18 +531,18 @@ export class Hunters {
   }
 
   /**
-   * Takes the world as the repos have it now: a hunter whose contract has been paid, done or
-   * pending sign-off, has returned with its trophy. Says whether any hunter changed.
+   * Takes the world as the repos have it now: a hunter whose contract has been paid has
+   * returned with its trophy. Says whether any hunter changed.
    */
   see(slots: SlotState[]): boolean {
     let changed = false
     for (const { hunter } of this.out.values()) {
-      if (hunter.state === "returned-trophy") continue
+      if (hunter.state === "returned-trophy" || hunter.contract === undefined) continue
       const region = slots.find((slot) => slot.slot === hunter.slot)
       if (region?.kind !== "region") continue
       const village = region.villages.find((v) => v.slug === hunter.village)
       const contract = village?.contracts.find((c) => c.id === hunter.contract)
-      if (paid(contract?.state)) {
+      if (paid(hunter.rite, contract?.state)) {
         hunter.state = "returned-trophy"
         changed = true
       }
@@ -523,32 +571,37 @@ export class Hunters {
     const next = afterMessage(entry.hunter.state, message)
     if (next === "turn-ended") {
       if (written.length > 0) this.changed()
-      void this.cameBack(id)
+      void this.cameBack(id, written.some((e) => e.kind === "result" && e.error))
       return
     }
     if (!this.move(id, next) && written.length > 0) this.changed()
   }
 
   /**
-   * The turn is over: the hunter comes back with a trophy if its contract's commit has
-   * landed, read from the repo now rather than from the last poll, or wounded if not.
+   * The turn is over: the hunter comes back with a trophy if its contract has been paid, read
+   * from the repo now rather than from the last poll, or wounded if not. A rite with no contract
+   * comes back with a trophy unless its turn `failed`.
    */
-  private async cameBack(id: string): Promise<void> {
+  private async cameBack(id: string, failed: boolean): Promise<void> {
     const entry = this.out.get(id)
     if (!entry) return
+    if (entry.hunter.contract === undefined) {
+      this.move(id, failed ? "returned-wounded" : "returned-trophy")
+      return
+    }
     let state: ContractState | undefined
     try {
       state = await this.lookup(entry.hunter)
     } catch (error) {
       console.error(`guslar: could not read ${entry.hunter.name}'s contract: ${(error as Error).message}`)
     }
-    this.move(id, paid(state) ? "returned-trophy" : "returned-wounded")
+    this.move(id, paid(entry.hunter.rite, state) ? "returned-trophy" : "returned-wounded")
   }
 
   /** Moves a hunter to a new state and says so to the map; returns whether it moved. */
   private move(id: string, state: HunterState): boolean {
     const hunter = this.out.get(id)?.hunter
-    if (!hunter || hunter.state === state || hunter.state === "returned-trophy") return false
+    if (!hunter || hunter.state === state || settled(hunter)) return false
     // A hunter with a prompt out waits on you, whatever else its session says meanwhile.
     if (hunter.prompt && state === "hunting") return false
     hunter.state = state
