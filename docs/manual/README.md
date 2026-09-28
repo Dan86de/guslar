@@ -51,7 +51,7 @@ No implementation details: only user paths, handles, commands, state and what pr
 ## Features
 
 - [Open the world](./open-the-world.md): `guslar` starts the server, opens the browser, and the map shows each region in its slot and fog elsewhere.
-- [The weather](./weather.md): the fog drifts like cloud while its outline stays put, so the map is alive when you watch it and still when you glance past it.
+- [The weather](./weather.md): the fog drifts like cloud while its outline stays put, so the map is alive when you watch it, still when you glance past it, and at rest while you are away from it.
 - [Configure the world](./configure-the-world.md): which `world.json` Guslar reads, how regions are named, and the configs it refuses.
 - [Read a village's notice board](./villages.md): every spec is a village on the map, and its board shows each contract's title, autonomy and state from the `slices/<slug>` trailers.
 - [See each village's stage](./village-stages.md): each village is painted as a bounty drafted, contracts posted or cleared, and the page says which.

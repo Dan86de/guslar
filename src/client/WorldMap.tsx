@@ -119,6 +119,7 @@ export function WorldMap({
     const life = { cancelled: false }
     const app = new Application()
     let onResize: (() => void) | undefined
+    let onVisibility: (() => void) | undefined
 
     void (async () => {
       const [, mapImage, fogImage, flareImage, ...images] = await Promise.all([
@@ -206,6 +207,18 @@ export function WorldMap({
       }
       onResize()
       app.renderer.on("resize", onResize)
+
+      // A window left open all day spends most of it behind another one, and there is no
+      // one to show a frame to while it does. Everything that moves on the map is placed
+      // from time the ticker reported, so stopping the ticker holds the weather and the
+      // hunters where the last frame left them, and starting it again reports the frame
+      // after the pause rather than the pause itself: the drift carries on, never skips.
+      onVisibility = () => {
+        if (document.hidden) app.ticker.stop()
+        else app.ticker.start()
+      }
+      document.addEventListener("visibilitychange", onVisibility)
+      onVisibility()
       setScene({
         villageAspect,
         show(world) {
@@ -236,6 +249,7 @@ export function WorldMap({
 
     return () => {
       life.cancelled = true
+      if (onVisibility) document.removeEventListener("visibilitychange", onVisibility)
       if (onResize) {
         app.renderer.off("resize", onResize)
         app.destroy(true, { children: true, texture: true })
