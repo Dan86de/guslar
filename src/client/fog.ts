@@ -21,33 +21,51 @@ export class FogLayer {
     REGION_SLOTS.forEach((slot, index) => this.clouds.set(slot, paintFog(SLOT_AREAS[slot], index + 1)))
   }
 
-  compose(world: WorldState): void {
+  /**
+   * Lays the fog out over the world as it stands.
+   *
+   * `world` is undefined until the first broadcast, when the map knows of no repos and every
+   * slot is under fog. `reveal` is how far the fog has pulled off the claimed regions
+   * (`revealProgress`, `reveal.ts`): at 0 it still stands over them, at 1 it is where it stays.
+   */
+  compose(world: WorldState | undefined, reveal: number): void {
     const ctx = this.canvas.getContext("2d")
     if (!ctx) throw new Error("no 2d canvas")
     ctx.globalCompositeOperation = "source-over"
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
 
-    for (const slot of world.slots) {
-      const cloud = this.clouds.get(slot.slot)
-      if (slot.kind !== "fog" || !cloud) continue
-      const area = SLOT_AREAS[slot.slot]
+    const claimed = new Set(world?.slots.filter((slot) => slot.kind === "region").map((slot) => slot.slot))
+    for (const slot of REGION_SLOTS) {
+      const cloud = this.clouds.get(slot)
+      if (!cloud) continue
+      // A claimed region keeps its own fog until the reveal has finished taking it away,
+      // thinning as the clear below opens out through it.
+      if (claimed.has(slot)) {
+        if (reveal >= 1) continue
+        ctx.globalAlpha = 1 - reveal
+      }
+      const area = SLOT_AREAS[slot]
       ctx.drawImage(cloud, area.x - cloud.width / 2, area.y - cloud.height / 2)
+      ctx.globalAlpha = 1
     }
 
     ctx.globalCompositeOperation = "destination-out"
-    for (const slot of world.slots) {
-      if (slot.kind !== "region") continue
-      const area = clearArea(slot.slot)
-      ctx.save()
-      ctx.translate(area.x, area.y)
-      ctx.scale(area.rx, area.ry)
-      const clear = ctx.createRadialGradient(0, 0, 0, 0, 0, 1.05)
-      clear.addColorStop(0, "rgba(0,0,0,1)")
-      clear.addColorStop(0.81, "rgba(0,0,0,1)")
-      clear.addColorStop(1, "rgba(0,0,0,0)")
-      ctx.fillStyle = clear
-      ctx.fillRect(-1.05, -1.05, 2.1, 2.1)
-      ctx.restore()
+    // The clear opens from each claimed region's heart out to its edge, which is the fog
+    // pulling back off it; at 0 nothing is clear yet and the whole map lies under weather.
+    if (reveal > 0) {
+      for (const slot of claimed) {
+        const area = clearArea(slot)
+        ctx.save()
+        ctx.translate(area.x, area.y)
+        ctx.scale(area.rx * reveal, area.ry * reveal)
+        const clear = ctx.createRadialGradient(0, 0, 0, 0, 0, 1.05)
+        clear.addColorStop(0, "rgba(0,0,0,1)")
+        clear.addColorStop(0.81, "rgba(0,0,0,1)")
+        clear.addColorStop(1, "rgba(0,0,0,0)")
+        ctx.fillStyle = clear
+        ctx.fillRect(-1.05, -1.05, 2.1, 2.1)
+        ctx.restore()
+      }
     }
     fadeEdges(ctx, this.canvas.width, this.canvas.height, FOG_EDGE_FEATHER)
     ctx.globalCompositeOperation = "source-over"

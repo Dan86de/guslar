@@ -17,6 +17,7 @@ import { featheredMap, FogLayer } from "./fog.js"
 import { fitMap, hunterGround, labelAnchor, MAP_SIZE, regionGround, villageSpots, type View } from "./geometry.js"
 import { HUNTER_STATE_NAMES } from "./hunterStates.js"
 import { HunterLayer, isOut, POSES, RIDE_MS, type HunterPlace, type Pose } from "./hunters.js"
+import { REVEAL_MS, REVEAL_STEP_MS, revealProgress } from "./reveal.js"
 import { WeatherLayer } from "./weather.js"
 
 /** What the map needs from the Pixi scene once it is built. */
@@ -179,13 +180,11 @@ export function WorldMap({
       const fog = new FogLayer()
       const fogTexture = Texture.from(fog.canvas)
       const fogSprite = new Sprite(fogTexture)
-      fogSprite.visible = false
       board.addChild(fogSprite)
 
       // The cloud art drifts over the fog's body, masked by the very same texture, so
       // the weather is only ever seen inside the outline the composite already has.
       const weather = new WeatherLayer(fogImage, fogTexture, app.ticker)
-      weather.container.visible = false
       board.addChild(weather.container)
 
       // Hunters stand over the fog: they only ride in claimed regions, and one hunting at the
@@ -219,13 +218,36 @@ export function WorldMap({
       }
       document.addEventListener("visibilitychange", onVisibility)
       onVisibility()
+
+      // The map arrives under fog over every slot, and gives the claimed ones up once, as the
+      // world's first broadcast tells it which they are. `shown` is the last world the fog was
+      // laid out for; `revealMs` is undefined until that first world, so the clock starts when
+      // there is something to uncover and runs down only once. A dropped socket brings another
+      // world, never another reveal: by then the clock is spent and the fog is where it stays.
+      let shown: WorldState | undefined
+      let revealMs: number | undefined
+      let sinceStep = 0
+      const layFog = () => {
+        fog.compose(shown, revealProgress(revealMs ?? 0))
+        fogSprite.texture.source.update()
+      }
+      layFog()
+      app.ticker.add((tick) => {
+        if (revealMs === undefined || revealMs >= REVEAL_MS) return
+        revealMs += tick.deltaMS
+        sinceStep += tick.deltaMS
+        // Held back until a step is due, or until the fog has arrived where it stays.
+        if (sinceStep < REVEAL_STEP_MS && revealMs < REVEAL_MS) return
+        sinceStep = 0
+        layFog()
+      })
+
       setScene({
         villageAspect,
         show(world) {
-          fog.compose(world)
-          fogSprite.texture.source.update()
-          fogSprite.visible = true
-          weather.container.visible = true
+          if (revealMs === undefined) revealMs = 0
+          shown = world
+          layFog()
 
           for (const child of villages.removeChildren()) child.destroy()
           for (const slot of world.slots) {
