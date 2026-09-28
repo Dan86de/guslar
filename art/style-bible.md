@@ -120,7 +120,7 @@ Generation order: 1, 2 first (S1 needs them). Then 3–5, 10, 11 (S2/S3). Then 6
 | 2 | `fog.png` | done 2026-09-27 | 2048² web copy, 4096² original in `art/source/`. Not truly seamless: strokes cut at the edge. Render with mirrored repeat or per-region offset under a soft mask, never plain tiling. Strokes are heavy at 1:1; render at ~2× or ~40% opacity. |
 | 3 | `village-bounty.png` | done 2026-09-27 | 1024² web copy. Also saved as `references/ref-village.png`: the only reference for villages 4 and 5. Oval ground plate: blend its edge softly onto the terrain. |
 | 4 | `village-contracts.png` | done 2026-09-27 | Board with five blank parchments, saddled horse, two lanterns. Lanterns carry a faint brass glow: accepted, helps the state read. Two chimneys smoke, not three. |
-| 5 | `village-cleared.png` | done 2026-09-27 | Skull on lintel, ringed fire, logs. One blank parchment remains on the gate post: paint it out by hand so cleared = empty board. |
+| 5 | `village-cleared.png` | done 2026-09-27 | Skull on lintel, ringed fire, logs. Regenerated with the gate post bare: board is empty, everything else identical. |
 | 10 | `notice-board.png` | done 2026-09-27 | 1030×1536, white bg to cut out. Wall-mounted, no legs: better for a panel. Card area is the inner rectangle between the side battens, ~8% margin. |
 | 11 | `contract-card.png` | done 2026-09-27 | 765×1024, white bg to cut out. Clean centre for text. The seal is the palette's one rust-red accent; a sealed contract can reuse the card with a second seal over the nail. |
 | 6 | `hunter-riding.png` | done 2026-09-27 | 515×768, white bg. Also `references/ref-hunter.png`: the only reference for 7–9. Identity carriers: two-tier hooded grey cloak, bone-white pommel, shaggy dark horse. |
