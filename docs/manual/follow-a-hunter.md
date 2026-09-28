@@ -50,7 +50,7 @@ The steps, in this order:
 
 - `verify replay` makes every claude started afterwards replay the transcript after its first message, about one line every 150 ms; a line `{"replay":"wait","for":"<name>"}` holds it until the run has a file `gates/<name>`, which `verify write gates/<name> open` makes. A gate once open stays open for every later claude.
 - A hunter rides between its village and its hunting ground for 2 s, and its tag follows it: pause before a screenshot of its look, or it is caught mid-ride.
-- A returned hunter stays on the map while its claude runs, which a stream-json claude does after its turn, until its village's contract is taken again or Guslar stops.
+- A returned hunter stays on the map while its claude runs, which a stream-json claude does after its turn, until its village's contract is taken again. A Guslar that stops keeps it and brings it back when it starts again, as in [Keep hunters across a restart](./keep-hunters.md).
 - A contract pending sign-off (`Slice-Pending:`) is a trophy too: its commit has landed, and the user inspects it.
 - A hunter whose claude exits leaves the map, as [Take a contract](./take-a-contract.md) says, whatever state it was in.
 - The trophy is judged from the repo twice: by the map's regular read of the repos, and once more the moment the turn ends, so a commit made just before the end is never taken for a wound.

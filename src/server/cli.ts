@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { homedir } from "node:os"
+import path from "node:path"
 import { parseArgs } from "node:util"
 import { openBrowser } from "./browser.js"
 import { defaultWorldPath, loadWorld, WorldConfigError } from "./config.js"
@@ -102,11 +103,16 @@ async function main(): Promise<void> {
   const reader = new WorldReader(world)
   const initial = await reader.read()
 
-  const hunters = new Hunters(process.env.GUSLAR_CLAUDE?.trim() || "claude", (hunter) =>
-    hunter.village === undefined || hunter.contract === undefined
-      ? Promise.resolve(undefined)
-      : reader.contract(hunter.slot, hunter.village, hunter.contract),
+  // Guslar's own hunters are kept beside the world they ride in, so a restart finds them again.
+  const hunters = new Hunters(
+    process.env.GUSLAR_CLAUDE?.trim() || "claude",
+    (hunter) =>
+      hunter.village === undefined || hunter.contract === undefined
+        ? Promise.resolve(undefined)
+        : reader.contract(hunter.slot, hunter.village, hunter.contract),
+    path.join(path.dirname(path.resolve(worldFile)), "hunters.json"),
   )
+  hunters.restore(initial)
 
   let server
   try {
@@ -141,6 +147,7 @@ async function main(): Promise<void> {
   }
   process.once("SIGINT", stop)
   process.once("SIGTERM", stop)
+  process.once("SIGHUP", stop)
 }
 
 main().catch((error: unknown) => {

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { randomUUID } from "node:crypto"
-import { realpathSync } from "node:fs"
+import { mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs"
 import { open } from "node:fs/promises"
 import path from "node:path"
 import { createInterface } from "node:readline"
@@ -86,8 +86,11 @@ export function resumeArgs(sessionId: string, permissionMode: Hunter["permission
   return ["--resume", sessionId, "--permission-mode", permissionMode]
 }
 
-/** The arguments every hunter's `claude` runs with: headless, stream-json both ways, one process across turns. */
-export function claudeArgs(permissionMode: Hunter["permissionMode"]): string[] {
+/**
+ * The arguments every hunter's `claude` runs with: headless, stream-json both ways, one process
+ * across turns, and on the session it rode out with when it is called back after Guslar restarted.
+ */
+export function claudeArgs(permissionMode: Hunter["permissionMode"], resume?: string): string[] {
   return [
     "-p",
     "--input-format",
@@ -97,8 +100,18 @@ export function claudeArgs(permissionMode: Hunter["permissionMode"]): string[] {
     "--verbose",
     "--permission-mode",
     permissionMode,
+    ...(resume ? ["--resume", resume] : []),
   ]
 }
+
+/** What the journal says of a turn cut short because Guslar stopped. */
+export const CUT_SHORT = "Guslar stopped during this turn. Write to resume the session."
+
+/** One hunter as Guslar keeps it on disk between runs: the hunter as the map had it, and the repo it was sent into. */
+type Kept = { hunter: Hunter; repo: string }
+
+/** How long a change waits before the roll is written, so a busy stream is not written line by line. */
+const SAVE_DELAY = 200
 
 /** Reads a hunter's contract as it stands in its repo now, or undefined when it is gone. */
 export type ContractLookup = (hunter: Hunter) => Promise<ContractState | undefined>
@@ -322,7 +335,10 @@ export class Hunters {
     string,
     {
       hunter: Hunter
-      process: ChildProcessWithoutNullStreams
+      /** Its claude, while one runs; a hunter brought back after Guslar restarted has none until you write to it. */
+      process?: ChildProcessWithoutNullStreams
+      /** Its claude being started again on its session, while that is under way. */
+      waking?: Promise<Error | undefined>
       /** The repo it was sent into, where its session is resumed too. */
       repo: string
       asking: Pending[]
@@ -337,15 +353,56 @@ export class Hunters {
   private readonly listeners = new Set<() => void>()
   /** Where this Guslar listens, given to each hunter as `GUSLAR_URL` so its hooks can reach it. */
   private url: string | undefined
+  /** The roll waiting to be written, while a change is. */
+  private saving: NodeJS.Timeout | undefined
+  /** Once Guslar is stopping, its hunters' claudes exit, and the roll keeps them as they were. */
+  private closing = false
 
   /**
    * `claude` is the program each hunter runs: `GUSLAR_CLAUDE`, or `claude` on the PATH.
    * `lookup` reads a hunter's contract from its repo, to judge how it came back.
+   * `roll` is the file Guslar's own hunters are kept in, so they are on the map again after it restarts.
    */
   constructor(
     private readonly claude: string,
     private readonly lookup: ContractLookup,
+    private readonly roll?: string,
   ) {}
+
+  /**
+   * Brings back the hunters the roll kept, each in a region that still stands on the same repo and
+   * with a session to resume. None has a claude running: a hunter that was out when Guslar stopped
+   * comes back wounded, its turn cut short, and writing to it resumes its session.
+   */
+  restore(slots: SlotState[]): void {
+    if (!this.roll) return
+    let kept: unknown
+    try {
+      kept = JSON.parse(readFileSync(this.roll, "utf8"))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        console.error(`guslar: could not read the hunters kept in ${this.roll}: ${(error as Error).message}`)
+      }
+      return
+    }
+    for (const { hunter, repo } of Array.isArray(kept) ? (kept as Partial<Kept>[]) : []) {
+      if (typeof hunter?.id !== "string" || typeof hunter.sessionId !== "string" || typeof repo !== "string") continue
+      if (this.out.has(hunter.id) || !Array.isArray(hunter.journal)) continue
+      const region = slots.find((slot) => slot.slot === hunter.slot)
+      if (region?.kind !== "region" || real(region.repo) !== real(repo)) continue
+      delete hunter.prompt
+      delete hunter.terminal
+      delete hunter.lastHook
+      if (!isReturned(hunter)) {
+        hunter.state = "returned-wounded"
+        hunter.journal.push({ kind: "result", text: CUT_SHORT, error: true })
+      }
+      if (this.list().some((h) => h.name === hunter.name)) hunter.name = this.freeName()
+      this.out.set(hunter.id, { hunter, repo: region.repo, asking: [] })
+    }
+    this.see(slots)
+    this.save()
+  }
 
   /** Tells the hunters sent from now on where this Guslar listens. */
   listenAt(url: string): void {
@@ -424,16 +481,8 @@ export class Hunters {
     around: Hunter[],
   ): Promise<TakeResult> {
     const id = randomUUID()
-    const child = spawn(this.claude, claudeArgs(request.permissionMode), {
-      cwd: region.repo,
-      env: { ...process.env, GUSLAR_HUNTER_ID: id, ...(this.url ? { GUSLAR_URL: this.url } : {}) },
-      stdio: ["pipe", "pipe", "pipe"],
-    })
-    const started = await new Promise<Error | undefined>((resolve) => {
-      child.once("spawn", () => resolve(undefined))
-      child.once("error", resolve)
-    })
-    if (started) return { status: 502, error: `Could not start ${this.claude}: ${started.message}` }
+    const child = await this.launch(id, region.repo, claudeArgs(request.permissionMode))
+    if (child instanceof Error) return { status: 502, error: `Could not start ${this.claude}: ${child.message}` }
 
     // A hunter back in this village or region makes way for the new one, and its name is free again.
     for (const returned of around) this.dismiss(returned.id)
@@ -450,39 +499,82 @@ export class Hunters {
       journal: [{ kind: "you", text: opening }],
     }
 
-    const lines = createInterface({ input: child.stdout, crlfDelay: Infinity })
-    lines.on("line", (line) => this.heard(hunter.id, line))
-    let stderr = ""
-    child.stderr.on("data", (chunk: Buffer) => (stderr = (stderr + chunk.toString()).slice(-2000)))
-    child.stdin.on("error", () => {}) // a claude that exits early closes its stdin under us
-    child.once("exit", (code, signal) => {
-      this.release(hunter.id)
-      this.hangUp(hunter.id)
-      this.out.delete(hunter.id)
-      if (code !== 0 && code !== null) {
-        const last = stderr.trim().split("\n").pop()
-        console.error(`guslar: ${hunter.name}'s claude exited with ${code}${last ? `: ${last}` : ""}`)
-      } else if (signal) {
-        console.error(`guslar: ${hunter.name}'s claude was stopped by ${signal}`)
-      }
-      this.changed()
-    })
-
     child.stdin.write(userMessage(opening))
     this.out.set(hunter.id, { hunter, process: child, repo: region.repo, asking: [] })
     this.changed()
     return { hunter }
   }
 
-  /** Writes what you typed in a hunter's journal to its session, as the next user message. */
-  reply(id: string, text: string): ReplyResult {
+  /**
+   * Starts a hunter's claude in its repo, with its id in `GUSLAR_HUNTER_ID`: what it streams moves
+   * the hunter, and once it exits the hunter leaves the map. Says why when it cannot start.
+   *
+   * It runs in a process group of its own, so Ctrl-C or closing Guslar's terminal reaches Guslar
+   * alone: Guslar keeps its hunters first, then ends each claude's stdin, and the claude finishes
+   * the turn it is on and exits.
+   */
+  private async launch(id: string, repo: string, args: string[]): Promise<ChildProcessWithoutNullStreams | Error> {
+    const child = spawn(this.claude, args, {
+      cwd: repo,
+      env: { ...process.env, GUSLAR_HUNTER_ID: id, ...(this.url ? { GUSLAR_URL: this.url } : {}) },
+      stdio: ["pipe", "pipe", "pipe"],
+      detached: true,
+    })
+    const started = await new Promise<Error | undefined>((resolve) => {
+      child.once("spawn", () => resolve(undefined))
+      child.once("error", resolve)
+    })
+    if (started) return started
+
+    const lines = createInterface({ input: child.stdout, crlfDelay: Infinity })
+    lines.on("line", (line) => this.heard(id, line))
+    let stderr = ""
+    child.stderr.on("data", (chunk: Buffer) => (stderr = (stderr + chunk.toString()).slice(-2000)))
+    child.stdin.on("error", () => {}) // a claude that exits early closes its stdin under us
+    child.once("exit", (code, signal) => {
+      const entry = this.out.get(id)
+      if (entry?.process !== child) return
+      const { name } = entry.hunter
+      this.release(id)
+      this.hangUp(id)
+      this.out.delete(id)
+      if (code !== 0 && code !== null) {
+        const last = stderr.trim().split("\n").pop()
+        console.error(`guslar: ${name}'s claude exited with ${code}${last ? `: ${last}` : ""}`)
+      } else if (signal) {
+        console.error(`guslar: ${name}'s claude was stopped by ${signal}`)
+      }
+      this.changed()
+    })
+    return child
+  }
+
+  /**
+   * Writes what you typed in a hunter's journal to its session, as the next user message. A hunter
+   * brought back after Guslar restarted has no claude running: its session is resumed for it first.
+   */
+  async reply(id: string, text: string): Promise<ReplyResult> {
     const entry = this.out.get(id)
     const outsider = this.outsiderOf(id)?.hunter
     if (outsider) return { status: 409, error: `${outsider.name} was started outside Guslar: write to it in its own terminal.` }
     if (!entry) return { status: 404, error: "No such hunter is out." }
     const trimmed = text.trim()
     if (trimmed === "") return { status: 400, error: "A reply needs words." }
-    if (!entry.process.stdin.writable) return { status: 409, error: `${entry.hunter.name} no longer listens.` }
+    if (!entry.process) {
+      const sessionId = entry.hunter.sessionId
+      if (!sessionId) return { status: 409, error: `${entry.hunter.name} has no session to resume.` }
+      entry.waking ??= this.launch(id, entry.repo, claudeArgs(entry.hunter.permissionMode, sessionId)).then((child) => {
+        delete entry.waking
+        if (child instanceof Error) return child
+        if (this.out.get(id) === entry) entry.process = child
+        else child.stdin.end() // sent home while it woke
+        return undefined
+      })
+      const failed = await entry.waking
+      if (failed) return { status: 502, error: `Could not resume ${entry.hunter.name}'s session: ${failed.message}` }
+      if (this.out.get(id) !== entry) return { status: 404, error: "No such hunter is out." }
+    }
+    if (!entry.process?.stdin.writable) return { status: 409, error: `${entry.hunter.name} no longer listens.` }
     entry.process.stdin.write(userMessage(trimmed))
     const sent: JournalEntry = { kind: "you", text: trimmed }
     entry.hunter.journal.push(sent)
@@ -893,15 +985,52 @@ export class Hunters {
     this.release(id)
     this.hangUp(id)
     this.out.delete(id)
-    entry.process.stdin.end()
+    entry.process?.stdin.end()
+    this.save()
   }
 
-  /** Lets every hunter go: its stdin ends, so its claude finishes the turn it is on and exits. */
+  /**
+   * Lets every hunter go: its stdin ends, so its claude finishes the turn it is on and exits. The
+   * roll is written first, and no more after, so the hunters are on the map again when Guslar is.
+   */
   close(): void {
+    this.flush()
+    this.closing = true
     for (const [id, { process }] of this.out) {
       this.release(id)
       this.hangUp(id)
-      process.stdin.end()
+      process?.stdin.end()
+    }
+  }
+
+  /** Writes the roll soon, once changes have settled. */
+  private save(): void {
+    if (!this.roll || this.closing || this.saving) return
+    this.saving = setTimeout(() => this.flush(), SAVE_DELAY)
+  }
+
+  /** Writes the roll now: Guslar's own hunters, as the map has them, each with its repo. With none, there is no roll. */
+  private flush(): void {
+    clearTimeout(this.saving)
+    this.saving = undefined
+    if (!this.roll || this.closing) return
+    const kept: Kept[] = [...this.out.values()].map(({ hunter, repo }) => {
+      const still = { ...hunter }
+      delete still.prompt
+      delete still.terminal
+      return { hunter: still, repo }
+    })
+    try {
+      if (kept.length === 0) {
+        rmSync(this.roll, { force: true })
+        return
+      }
+      mkdirSync(path.dirname(this.roll), { recursive: true })
+      const next = `${this.roll}.${process.pid}.tmp`
+      writeFileSync(next, `${JSON.stringify(kept)}\n`)
+      renameSync(next, this.roll)
+    } catch (error) {
+      console.error(`guslar: could not keep the hunters in ${this.roll}: ${(error as Error).message}`)
     }
   }
 
@@ -915,6 +1044,7 @@ export class Hunters {
   }
 
   private changed(): void {
+    this.save()
     for (const listener of this.listeners) listener()
   }
 }

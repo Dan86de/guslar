@@ -58,6 +58,7 @@ Slots with no repo stay under fog.
 ```
 
 A region is named after its repo folder unless you give it a `name`.
+Guslar keeps its hunters in `hunters.json` beside that file, so they are back on the map, journals and sessions included, after Guslar restarts.
 Relative repo paths start at the folder holding `world.json`.
 
 ## Hooks

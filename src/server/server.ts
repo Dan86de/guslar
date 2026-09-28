@@ -190,7 +190,7 @@ export async function startServer(options: {
       sendJson(res, 400, { error: "The request cannot be read: expected { text }" })
       return
     }
-    const result = hunters.reply(id, text)
+    const result = await hunters.reply(id, text)
     if ("sent" in result) sendJson(res, 201, result)
     else sendJson(res, result.status, { error: result.error })
   }
