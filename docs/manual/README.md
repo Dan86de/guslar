@@ -14,6 +14,7 @@ Each hunter keeps a journal of its session, opened from its figure on the map, w
 From the journal, a hunter's session can be resumed in a real terminal along the map's foot, when the journal is not enough.
 `guslar hooks install` puts Guslar's Claude Code hooks into every repo of the world, beside any hooks already there, so each hunter's session reports its events to the map; `guslar hooks remove` takes them out again.
 With the hooks in, a hunter's permission request is pinned to the map as a petition, and allowing or denying it there answers the session.
+A `claude` session started outside Guslar, in a repo of the world, shows up as a hunter too, bound to the contract its first reply names, with a journal to read but not to write in.
 
 ## Start from a known state
 
@@ -59,4 +60,5 @@ No implementation details: only user paths, handles, commands, state and what pr
 - [Open a hunter in a terminal](./open-in-terminal.md): the journal's `Open in terminal` resumes the hunter's session with `claude --resume` in a terminal on the map, which is read and typed into like any other.
 - [Install the hooks](./install-hooks.md): `guslar hooks install` adds Guslar's hooks to each repo's `.claude/settings.local.json` and keeps every other hook, a hunter's hook events reach the broadcast, and `guslar hooks remove` leaves the file as it was.
 - [Answer a hunter's request](./answer-a-request.md): a hunter's permission request appears as a petition on the map, the hunter awaits you, and allowing or denying it, with a reason, answers its session.
+- [See sessions started outside Guslar](./outside-sessions.md): a `claude` session started in a registered repo appears as a hunter by its region's plaque, rides for the contract its first reply line names, follows the same states as Guslar's own hunters, and has a journal with no line to type into.
 - [Lose and regain the server](./reconnect.md): the map says when the server is gone and recovers by itself when it is back.

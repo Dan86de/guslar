@@ -1,14 +1,16 @@
 // The command Claude Code runs for each event Guslar listens to, from a repo's
 // .claude/settings.local.json. It reads the event from stdin and posts it to the Guslar that
-// started this session (GUSLAR_URL), tagged with the hunter's id (GUSLAR_HUNTER_ID). It always
-// exits 0, and prints nothing but a permission decision, so a session outside Guslar goes on as
-// if no hook were there.
+// started this session (GUSLAR_URL), tagged with the hunter's id (GUSLAR_HUNTER_ID). A session
+// started outside Guslar has no GUSLAR_URL, so its events go to every Guslar running for this
+// user, as each lists itself under ~/.guslar/running/. It always exits 0, and prints nothing but a
+// permission decision, so a session outside Guslar goes on as if no hook were there.
 //
 // A PermissionRequest from a hunter waits for your answer on the map and prints it as the hook's
 // decision. When that hunter's Guslar cannot be reached, it allows the request, so a hunter is
 // never stranded by a Guslar that is gone; any other session gets no decision from Guslar.
 import { request } from "node:http"
 import type { HookReply, HookRequest, PermissionAnswer } from "../shared/world.js"
+import { runningGuslars } from "./running.js"
 
 /** How long an ordinary event waits for Guslar before the hook lets the session go on. */
 const POST_TIMEOUT_MS = 3000
@@ -61,6 +63,13 @@ function decisionOutput(decision: PermissionAnswer): string {
   return JSON.stringify({ hookSpecificOutput: { hookEventName: "PermissionRequest", decision } })
 }
 
+/** Where every Guslar running for this user takes hook events; none without a HOME to look in. */
+async function everyGuslar(): Promise<URL[]> {
+  const home = process.env.HOME
+  if (!home) return []
+  return (await runningGuslars(home)).map((running) => new URL("/api/hooks", running.url))
+}
+
 /** Posts the event, and returns what the hook prints: a permission decision, or nothing. */
 async function main(): Promise<string> {
   const text = await readStdin()
@@ -83,7 +92,8 @@ async function main(): Promise<string> {
   }
 
   if (!asks) {
-    if (url) await post(url, body, POST_TIMEOUT_MS).catch(() => undefined)
+    const urls = url ? [url] : await everyGuslar()
+    await Promise.all(urls.map((to) => post(to, body, POST_TIMEOUT_MS).catch(() => undefined)))
     return ""
   }
   try {

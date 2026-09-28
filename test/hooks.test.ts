@@ -253,12 +253,12 @@ describe("a hook event from a hunter's session", () => {
     for (const { command } of ran) expect(command).toContain("guslar-hook.js")
   })
 
-  it("is posted only by this machine, and one naming no hunter is not heard", async () => {
+  it("is posted only by this machine, and one naming no hunter from no region is not heard", async () => {
     const bog = bogwater()
     guslar = await startGuslar(["--no-open", "--world", worldOf(bog.repo)])
     await receiveWorld(guslar.url)
     const url = new URL("/api/hooks", guslar.url)
-    const input = { hook_event_name: "SessionStart", session_id: "outside", cwd: bog.repo }
+    const input = { hook_event_name: "SessionStart", session_id: "outside", cwd: tempDir() }
 
     const outside = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ input }) })
     expect([outside.status, await outside.json()]).toEqual([202, { heard: false }])

@@ -664,6 +664,36 @@ const commands = {
     if (hooks.length) out(`it runs the repo's hooks for: ${[...new Set(hooks)].join(", ")}`)
   },
 
+  async claude(flags, [repo, prompt]) {
+    const run = runDir(flags)
+    if (!repo || prompt === undefined) throw new Refusal("claude <repo in run folder> <prompt>")
+    const dir = path.resolve(run, repo)
+    if (!inside(dir, run) || dir === run) throw new Refusal(`${repo} is outside the run folder`)
+    if (!existsSync(dir) || !statSync(dir).isDirectory()) throw new Refusal(`${repo} is not a folder of this run`)
+    const script = path.join(run, "claude-transcript.jsonl")
+    if (!existsSync(script)) throw new Refusal("say what the session does first: replay <stream-json transcript>")
+    // As a user starts claude in a terminal: the run's HOME, and nothing of Guslar's in its environment.
+    const child = spawn(process.execPath, [RECORD_CLAUDE], {
+      cwd: dir,
+      env: {
+        PATH: process.env.PATH,
+        HOME: path.join(run, "home"),
+        VERIFY_CLAUDE_LOG: path.join(run, "claude.log"),
+        VERIFY_CLAUDE_TRANSCRIPT: script,
+        VERIFY_CLAUDE_GATES: path.join(run, "gates"),
+        VERIFY_CLAUDE_PROMPT: prompt,
+      },
+      stdio: "ignore",
+      detached: true,
+    })
+    child.unref()
+    await new Promise((resolve, reject) => {
+      child.once("spawn", resolve)
+      child.once("error", reject)
+    })
+    out(`outside claude pid ${child.pid} started in ${path.relative(run, dir)}, with no GUSLAR_URL or GUSLAR_HUNTER_ID`)
+  },
+
   async stop(flags) {
     const run = runDir(flags)
     const state = readState(run)

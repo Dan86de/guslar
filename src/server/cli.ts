@@ -1,9 +1,11 @@
 #!/usr/bin/env node
+import { homedir } from "node:os"
 import { parseArgs } from "node:util"
 import { openBrowser } from "./browser.js"
 import { defaultWorldPath, loadWorld, WorldConfigError } from "./config.js"
 import { installHooks, removeHooks, type HookChange } from "./hooks.js"
 import { Hunters } from "./hunters.js"
+import { announce } from "./running.js"
 import { startServer } from "./server.js"
 import { WorldReader } from "./world.js"
 
@@ -120,6 +122,8 @@ async function main(): Promise<void> {
   console.log(`Guslar reads ${worldFile} (${regions} ${regions === 1 ? "region" : "regions"})`)
   console.log(`Guslar is listening on ${server.url}`)
   hunters.listenAt(server.url)
+  // Sessions started outside Guslar find it here: their hooks have no GUSLAR_URL.
+  const unannounce = announce(homedir(), server.url)
 
   const running = server
   const unfollow = reader.follow(initial, (next) => {
@@ -131,6 +135,7 @@ async function main(): Promise<void> {
 
   const stop = () => {
     unfollow()
+    unannounce()
     hunters.close()
     void server.close().then(() => process.exit(0))
   }

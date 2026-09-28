@@ -231,7 +231,7 @@ export async function startServer(options: {
     }
     const asking = request.input.hook_event_name === "PermissionRequest" ? hunters.asked(request) : undefined
     if (!asking) {
-      const reply: HookReply = { heard: hunters.hooked(request) }
+      const reply: HookReply = { heard: await hunters.hooked(request, slots) }
       sendJson(res, 202, reply)
       return
     }

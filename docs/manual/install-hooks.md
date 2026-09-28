@@ -79,5 +79,5 @@ The steps, in this order:
 - The hooks live in each repo's `.claude/settings.local.json`, Claude Code's settings for this machine only. Guslar keeps that file out of `git status` with two lines in the repo's `.git/info/exclude`, since `implement-slice` needs a clean tree, and takes them out again on remove.
 - Install checks every repo's settings file before it writes any, so one broken file stops the whole install.
 - A hook runs `guslar-hook.js` from the Guslar that installed it. After moving or updating Guslar, install again: it replaces Guslar's own hooks and says `updated`.
-- The hook reaches only the Guslar that started the session, through `GUSLAR_URL`. A session Guslar did not start runs the hook to no effect.
+- A hunter's hook reaches only the Guslar that started it, through `GUSLAR_URL`. A session Guslar did not start reaches every Guslar running for the user, through `~/.guslar/running/`, and is shown as a hunter when its repo is in that Guslar's world, as [See sessions started outside Guslar](./outside-sessions.md) says. With no Guslar running, it runs the hook to no effect.
 - `verify replay` lines `{"replay":"hook",…}` make the recorder claude run the repo's installed hooks as Claude Code would, so the hook, not the recorder, posts the event.

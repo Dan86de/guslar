@@ -62,7 +62,8 @@ function Entry({ entry, hunter }: { entry: JournalEntry; hunter: Hunter }) {
 
 /**
  * A hunter's journal: its conversation and tool calls as they arrive, and a line to write back to
- * it. It stands beside the map rather than over it, so the hunter can still be watched.
+ * it. It stands beside the map rather than over it, so the hunter can still be watched. A session
+ * started outside Guslar is read here and written to in its own terminal.
  */
 export function Journal({
   hunter,
@@ -139,15 +140,17 @@ export function Journal({
         </p>
         <div className="journal-status">
           <p className="journal-state">{HUNTER_STATE_NAMES[hunter.state]}</p>
-          <button
-            type="button"
-            className="journal-terminal"
-            disabled={!hunter.sessionId}
-            title={hunter.sessionId ? undefined : `${hunter.name}'s session has not begun yet.`}
-            onClick={onOpenTerminal}
-          >
-            Open in terminal
-          </button>
+          {!hunter.outside && (
+            <button
+              type="button"
+              className="journal-terminal"
+              disabled={!hunter.sessionId}
+              title={hunter.sessionId ? undefined : `${hunter.name}'s session has not begun yet.`}
+              onClick={onOpenTerminal}
+            >
+              Open in terminal
+            </button>
+          )}
         </div>
         <button type="button" className="journal-close" aria-label="Close the journal" onClick={() => dialog.current?.close()}>
           Close
@@ -167,26 +170,30 @@ export function Journal({
           <Entry key={index} entry={entry} hunter={hunter} />
         ))}
       </ol>
-      <form className="journal-reply" onSubmit={(event) => void send(event)}>
-        {problem && (
-          <p className="journal-problem" role="alert">
-            {problem}
-          </p>
-        )}
-        <textarea
-          className="journal-draft"
-          aria-label={`Reply to ${hunter.name}`}
-          placeholder={`Write to ${hunter.name}…`}
-          rows={2}
-          value={draft}
-          autoFocus
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={onKeyDown}
-        />
-        <button type="submit" className="journal-send" disabled={sending || draft.trim() === ""}>
-          Send
-        </button>
-      </form>
+      {hunter.outside ? (
+        <p className="journal-outside">Started outside Guslar: write to {hunter.name} in its own terminal.</p>
+      ) : (
+        <form className="journal-reply" onSubmit={(event) => void send(event)}>
+          {problem && (
+            <p className="journal-problem" role="alert">
+              {problem}
+            </p>
+          )}
+          <textarea
+            className="journal-draft"
+            aria-label={`Reply to ${hunter.name}`}
+            placeholder={`Write to ${hunter.name}…`}
+            rows={2}
+            value={draft}
+            autoFocus
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={onKeyDown}
+          />
+          <button type="submit" className="journal-send" disabled={sending || draft.trim() === ""}>
+            Send
+          </button>
+        </form>
+      )}
     </dialog>
   )
 }

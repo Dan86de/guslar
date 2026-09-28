@@ -7,15 +7,21 @@
 // {"replay":"next"} is not sent either: the replay waits there for the next line on its stdin.
 // A line {"replay":"hook","event":…,"input":…} is not sent either: as Claude Code does, it runs
 // every hook the repo's .claude/settings.local.json has for that event, the event on its stdin.
+// Every line it replays is also written to its session's transcript, sessions/<pid>.jsonl in the
+// run, whose path each hook is given as `transcript_path`, as Claude Code does.
 // Started in a terminal, as "open in terminal" resumes a session, it replays nothing: it says
 // which session it resumed, logs each line typed to it and answers it, and exits when the
-// terminal hangs up or its input ends.
+// terminal hangs up or its input ends. With VERIFY_CLAUDE_PROMPT (`verify claude`), it is a
+// session a user started outside Guslar: it takes that prompt as its first message, replays with
+// nothing on stdout, and exits once done.
 import { spawnSync } from "node:child_process"
-import { appendFileSync, existsSync, readFileSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { createInterface } from "node:readline"
 import { setTimeout as sleep } from "node:timers/promises"
 
+const sessionFile = path.join(path.dirname(process.env.VERIFY_CLAUDE_LOG), "sessions", `${process.pid}.jsonl`)
+const outside = process.env.VERIFY_CLAUDE_PROMPT !== undefined
 const log = (line) => appendFileSync(process.env.VERIFY_CLAUDE_LOG, `[pid ${process.pid}] ${line}\n`)
 
 let received = 0
@@ -23,7 +29,13 @@ let received = 0
 function runHooks(event, input = {}) {
   const file = path.join(process.cwd(), ".claude", "settings.local.json")
   const groups = existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")).hooks?.[event] ?? []) : []
-  const payload = JSON.stringify({ session_id: "replayed-session", cwd: process.cwd(), hook_event_name: event, ...input })
+  const payload = JSON.stringify({
+    session_id: "replayed-session",
+    transcript_path: sessionFile,
+    cwd: process.cwd(),
+    hook_event_name: event,
+    ...input,
+  })
   let ran = 0
   for (const group of groups) {
     const matcher = group.matcher ?? ""
@@ -60,7 +72,9 @@ async function replay(lines, gates) {
       runHooks(entry.event, entry.input)
       continue
     }
-    process.stdout.write(`${line}\n`)
+    if (!outside) process.stdout.write(`${line}\n`)
+    mkdirSync(path.dirname(sessionFile), { recursive: true })
+    appendFileSync(sessionFile, `${line}\n`)
     const tool = entry.type === "assistant" ? entry.message?.content?.find((b) => b.type === "tool_use")?.name : undefined
     const kind = entry.request?.subtype ?? entry.subtype
     log(`sent ${entry.type}${kind ? ` ${kind}` : ""}${tool ? ` ${tool}` : ""}`)
@@ -91,6 +105,14 @@ if (process.stdin.isTTY) {
   process.exit(0)
 }
 const transcript = process.env.VERIFY_CLAUDE_TRANSCRIPT
+if (outside) {
+  log(`outside Guslar, prompt: ${process.env.VERIFY_CLAUDE_PROMPT}`)
+  const lines = readFileSync(transcript, "utf8").split("\n").filter(Boolean)
+  log(`replaying ${path.basename(transcript)}: ${lines.length} lines`)
+  await replay(lines, process.env.VERIFY_CLAUDE_GATES)
+  log("session over, exiting")
+  process.exit(0)
+}
 let replaying
 for await (const line of createInterface({ input: process.stdin })) {
   log(`stdin: ${line}`)

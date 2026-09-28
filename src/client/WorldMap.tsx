@@ -50,23 +50,34 @@ const POSE_ART: Record<Pose, string> = {
 
 /**
  * Where every hunter in the world stands on the map: beside its village, or by its region's plaque
- * for a rite of the region's own, out in the field or back home.
+ * for a rite of the region's own or a session started outside Guslar, out in the field or back
+ * home. Hunters on the same ground stand side by side, each next one further out.
  */
 function hunterPlaces(world: WorldState, aspect: number): HunterPlace[] {
+  const taken = new Map<string, number>()
   return world.hunters.flatMap((hunter) => {
     const region = world.slots.find((slot) => slot.slot === hunter.slot)
     if (region?.kind !== "region") return []
+    let ground
     if (hunter.village === undefined) {
-      const ground = regionGround(region.slot, aspect)
-      return [{ hunter, at: isOut(hunter.state) ? ground.field : ground.home, height: ground.height, outward: ground.outward }]
+      ground = regionGround(region.slot, aspect)
+    } else {
+      const index = region.villages.findIndex((v) => v.slug === hunter.village)
+      const spot = villageSpots(region.slot, region.villages.length, aspect)[index]
+      if (!spot) return []
+      ground = hunterGround(spot, aspect)
     }
-    const index = region.villages.findIndex((v) => v.slug === hunter.village)
-    const spot = villageSpots(region.slot, region.villages.length, aspect)[index]
-    if (!spot) return []
-    const ground = hunterGround(spot, aspect)
-    return [{ hunter, at: isOut(hunter.state) ? ground.field : ground.home, height: ground.height, outward: ground.outward }]
+    const at = isOut(hunter.state) ? ground.field : ground.home
+    const key = `${at.x},${at.y}`
+    const before = taken.get(key) ?? 0
+    taken.set(key, before + 1)
+    const step = ground.height * SIDE_BY_SIDE * before * ground.outward
+    return [{ hunter, at: { x: at.x + step, y: at.y }, height: ground.height, outward: ground.outward }]
   })
 }
+
+/** How far apart two hunters on the same ground stand, as a share of their height: a figure's width and a little. */
+const SIDE_BY_SIDE = 0.75
 
 /** A village the user opened: its region's slot and the spec's slug. */
 export type VillageRef = { slot: RegionSlot; slug: string }

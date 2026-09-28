@@ -114,13 +114,21 @@ export const RITE_NAMES: Record<Rite, string> = {
   "sign-off": "Inspect the trophy",
 }
 
-/** A Claude Code session Guslar started on a rite, while its process runs. */
+/**
+ * A Claude Code session on the map: one Guslar started on a rite, while its process runs, or one
+ * started outside Guslar in a registered repo (`outside`), seen through its hooks until it ends.
+ */
 export type Hunter = {
   /** Given to the session as `GUSLAR_HUNTER_ID`, so its hooks and stream join up. */
   id: string
   name: string
-  /** The skill it was sent with. */
-  rite: Rite
+  /**
+   * The skill it was sent with. An outside session has none until its first reply line names
+   * the contract `/implement-slice` took, and then it is `implement-slice`.
+   */
+  rite?: Rite
+  /** Started outside Guslar: its journal is read only, since its session has a terminal of its own. */
+  outside?: true
   /** The region it rides in, and the village and contract it rides for, when its rite has them. */
   slot: RegionSlot
   village?: string
@@ -196,6 +204,8 @@ export type HookReply = { heard: boolean; decision?: PermissionAnswer }
 /** What a hunter is out for, as a phrase after "out": `on S3`, or `to post contracts`. */
 export function errandOf(hunter: Pick<Hunter, "rite" | "contract">): string {
   switch (hunter.rite) {
+    case undefined:
+      return "on an errand of its own"
     case "implement-slice":
       return `on ${hunter.contract ?? "a contract"}`
     case "sign-off":

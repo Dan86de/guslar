@@ -50,7 +50,8 @@ export function App() {
           key={riteRegion.slot}
           slot={riteRegion.slot}
           name={riteRegion.name}
-          hunters={world?.hunters.filter((h) => h.slot === riteRegion.slot && h.village === undefined) ?? []}
+          // An outside session not on a contract stands by the plaque, but performs none of its rites.
+          hunters={world?.hunters.filter((h) => h.slot === riteRegion.slot && h.village === undefined && !h.outside) ?? []}
           onClose={() => setPerforming(undefined)}
         />
       )}

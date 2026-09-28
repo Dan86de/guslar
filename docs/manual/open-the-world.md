@@ -21,7 +21,7 @@ A user runs one command and the painted world opens in their browser: every repo
 ## Behind it
 
 - **`/api/world` agrees with the broadcast.** `verify http /api/world` prints `HTTP 200 application/json` and `{"slots":[…]}`, the same six slots as the broadcast.
-- **Guslar writes nothing.** `verify read home` prints `(empty)` after the steps above.
+- **Guslar writes nothing but where it listens.** `verify read home` prints `.guslar/` after the steps above, and `verify read home/.guslar/running` one file, `<pid>.json`, where `<pid>` is the pid `start` printed for Guslar. It is how a session started outside Guslar finds it, and Guslar takes it away when it stops, as [See sessions started outside Guslar](./outside-sessions.md) says.
 
 ## Gotchas
 

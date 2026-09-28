@@ -1,6 +1,10 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process"
 import { randomUUID } from "node:crypto"
+import { realpathSync } from "node:fs"
+import { open } from "node:fs/promises"
+import path from "node:path"
 import { createInterface } from "node:readline"
+import { StringDecoder } from "node:string_decoder"
 import type {
   Contract,
   ContractState,
@@ -16,7 +20,7 @@ import type {
   TakeRequest,
   Village,
 } from "../shared/world.js"
-import { isReturned, refusalOf, RITE_GROUND } from "../shared/world.js"
+import { isPermissionMode, isReturned, refusalOf, RITE_GROUND } from "../shared/world.js"
 import { Terminal } from "./terminals.js"
 
 /** Names handed out in order, the first one no hunter out is using. Original, from Slavic naming, none from the Witcher. */
@@ -103,7 +107,7 @@ export type ContractLookup = (hunter: Hunter) => Promise<ContractState | undefin
  * A contract whose rite is fulfilled: a hunt once its commit has landed, done or pending the
  * user's sign-off, and an inspection once the sign-off has made it done.
  */
-function paid(rite: Rite, state: ContractState | undefined): boolean {
+function paid(rite: Rite | undefined, state: ContractState | undefined): boolean {
   return state === "done" || (rite === "implement-slice" && state === "pending")
 }
 
@@ -146,6 +150,11 @@ type StreamMessage = {
   request?: { subtype?: unknown }
   result?: unknown
   is_error?: unknown
+}
+
+/** A hook event as the map shows it: the event, and the tool it is about when it names one. */
+function sightingOf(event: string, tool: unknown): HookSighting {
+  return typeof tool === "string" && tool !== "" ? { event, tool } : { event }
 }
 
 /** The tool whose call means the session is asking you a question. */
@@ -242,6 +251,61 @@ export function afterMessage(state: HunterState, message: StreamMessage): Hunter
   }
 }
 
+/**
+ * The line `/implement-slice` opens its first reply with, naming the contract it took:
+ * `Slice S3: Lay the plank road (also ready: S5)`.
+ */
+const SLICE_LINE = /^Slice (\S+): (.*)$/
+
+/** The most of a session's transcript read at one go. */
+const TRANSCRIPT_CHUNK = 1024 * 1024
+
+/**
+ * A session started outside Guslar, seen on the map through the hooks it runs: its hunter, its
+ * transcript as far as it has been read, and what the user last asked it.
+ */
+type Outsider = {
+  hunter: Hunter
+  transcript?: { path: string; offset: number; decoder: StringDecoder; partial: string }
+  /** The last prompt, which names the slices file when a contract's id alone does not say which. */
+  prompt?: string
+  /** Whether the session's next text is the first of its reply to a prompt, the one that names a contract. */
+  firstReply: boolean
+  /** Its hook events, taken one at a time, in the order they came. */
+  queue: Promise<void>
+}
+
+/** A path as the filesystem has it, links followed, so a repo and a cwd inside it compare. */
+function real(file: string): string {
+  try {
+    return realpathSync.native(file)
+  } catch {
+    return path.resolve(file)
+  }
+}
+
+/** The region whose repo a session's working directory lies in, if any. */
+function regionAt(cwd: unknown, slots: SlotState[]): Extract<SlotState, { kind: "region" }> | undefined {
+  if (typeof cwd !== "string" || !path.isAbsolute(cwd)) return undefined
+  const at = real(cwd)
+  for (const slot of slots) {
+    if (slot.kind !== "region") continue
+    const repo = real(slot.repo)
+    if (at === repo || at.startsWith(`${repo}${path.sep}`)) return slot
+  }
+  return undefined
+}
+
+/** Whether a transcript's user line is a prompt, rather than a tool's result coming back. */
+function isPrompt(message: { message?: { content?: unknown } }): boolean {
+  const content = message.message?.content
+  if (typeof content === "string") return true
+  return (
+    Array.isArray(content) &&
+    content.some((block) => typeof block === "object" && block !== null && (block as { type?: unknown }).type === "text")
+  )
+}
+
 /** A stream-json user message, one line on the hunter's stdin. */
 function userMessage(text: string): string {
   return `${JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text }] } })}\n`
@@ -266,6 +330,8 @@ export class Hunters {
       terminal?: Promise<Terminal | Error>
     }
   >()
+  /** The sessions started outside Guslar, by their session id. */
+  private readonly outsiders = new Map<string, Outsider>()
   private readonly listeners = new Set<() => void>()
   /** Where this Guslar listens, given to each hunter as `GUSLAR_URL` so its hooks can reach it. */
   private url: string | undefined
@@ -285,7 +351,17 @@ export class Hunters {
   }
 
   list(): Hunter[] {
-    return [...this.out.values()].map((entry) => entry.hunter)
+    return [...this.out.values(), ...this.outsiders.values()].map((entry) => entry.hunter)
+  }
+
+  /** A hunter on the map by its id, Guslar's own or an outside one. */
+  private find(id: string): Hunter | undefined {
+    return this.out.get(id)?.hunter ?? this.outsiderOf(id)?.hunter
+  }
+
+  private outsiderOf(id: string): Outsider | undefined {
+    for (const outsider of this.outsiders.values()) if (outsider.hunter.id === id) return outsider
+    return undefined
   }
 
   subscribe(listener: () => void): () => void {
@@ -316,7 +392,10 @@ export class Hunters {
       }
     }
 
-    const around = this.list().filter((h) => h.slot === request.slot && h.village === village?.slug)
+    // An outside session holds a village once it is seen on one of its contracts, and never a region.
+    const around = this.list().filter(
+      (h) => h.slot === request.slot && h.village === village?.slug && !(h.outside && h.village === undefined),
+    )
     const holder = around.find((h) => !isReturned(h))
     if (holder) return { status: 409, error: refusalOf({ title: village?.title ?? region.name }, holder) }
     const unfit = unfitFor(rite, village, contract)
@@ -376,6 +455,8 @@ export class Hunters {
   /** Writes what you typed in a hunter's journal to its session, as the next user message. */
   reply(id: string, text: string): ReplyResult {
     const entry = this.out.get(id)
+    const outsider = this.outsiderOf(id)?.hunter
+    if (outsider) return { status: 409, error: `${outsider.name} was started outside Guslar: write to it in its own terminal.` }
     if (!entry) return { status: 404, error: "No such hunter is out." }
     const trimmed = text.trim()
     if (trimmed === "") return { status: 400, error: "A reply needs words." }
@@ -397,6 +478,8 @@ export class Hunters {
    */
   async openTerminal(id: string): Promise<TerminalResult> {
     const entry = this.out.get(id)
+    const outsider = this.outsiderOf(id)?.hunter
+    if (outsider) return { status: 409, error: `${outsider.name} was started outside Guslar, in a terminal of its own.` }
     if (!entry) return { status: 404, error: "No such hunter is out." }
     const { hunter } = entry
     const sessionId = hunter.sessionId
@@ -455,18 +538,182 @@ export class Hunters {
   }
 
   /**
-   * Takes a hook event its session posted: the hunter it names shows it as its last. Says
-   * whether a hunter heard it; an event from a session Guslar did not start is not heard yet.
+   * Takes a hook event a session posted, and says whether a hunter heard it. The hunter it names
+   * shows it as its last. One naming no hunter comes from a session started outside Guslar: in a
+   * registered repo, it is that session's hunter, made the first time the session is seen.
    */
-  hooked(request: HookRequest): boolean {
-    const entry = request.hunterId ? this.out.get(request.hunterId) : undefined
+  hooked(request: HookRequest, slots: SlotState[]): Promise<boolean> {
+    if (request.hunterId === undefined) return this.sighted(request, slots)
+    const entry = this.out.get(request.hunterId)
     const event = request.input.hook_event_name
-    if (!entry || typeof event !== "string" || event === "") return false
-    const tool = request.input.tool_name
-    const sighting: HookSighting = typeof tool === "string" && tool !== "" ? { event, tool } : { event }
-    entry.hunter.lastHook = sighting
+    if (!entry || typeof event !== "string" || event === "") return Promise.resolve(false)
+    entry.hunter.lastHook = sightingOf(event, request.input.tool_name)
     this.changed()
-    return true
+    return Promise.resolve(true)
+  }
+
+  /**
+   * A hook event from a session Guslar did not start. Its first event in a registered repo puts it
+   * on the map, bar its last ones (a notification, or its end); a hunter's own session, resumed in
+   * a terminal, stays that hunter's. Its events are taken one at a time, in order.
+   */
+  private sighted(request: HookRequest, slots: SlotState[]): Promise<boolean> {
+    const { input } = request
+    const session = input.session_id
+    const event = input.hook_event_name
+    if (typeof session !== "string" || session === "" || typeof event !== "string" || event === "") {
+      return Promise.resolve(false)
+    }
+    if ([...this.out.values()].some((entry) => entry.hunter.sessionId === session)) return Promise.resolve(false)
+    let outsider = this.outsiders.get(session)
+    if (!outsider) {
+      if (event === "SessionEnd" || event === "Notification") return Promise.resolve(false)
+      const region = regionAt(input.cwd, slots)
+      if (!region) return Promise.resolve(false)
+      outsider = {
+        hunter: {
+          id: randomUUID(),
+          name: this.freeName(),
+          outside: true,
+          slot: region.slot,
+          permissionMode: isPermissionMode(input.permission_mode) ? input.permission_mode : "default",
+          state: "riding-out",
+          journal: [],
+          sessionId: session,
+        },
+        firstReply: true,
+        queue: Promise.resolve(),
+      }
+      this.outsiders.set(session, outsider)
+    }
+    const seen = outsider
+    const done = seen.queue.then(() => this.seenOutside(seen, event, input, slots))
+    seen.queue = done.catch((error: unknown) => {
+      console.error(`guslar: could not follow ${seen.hunter.name}: ${(error as Error).message}`)
+    })
+    return seen.queue.then(() => true)
+  }
+
+  /** What one hook event of an outside session does to its hunter: the same states a spawned one goes through. */
+  private async seenOutside(outsider: Outsider, event: string, input: HookRequest["input"], slots: SlotState[]): Promise<void> {
+    const { hunter } = outsider
+    if (this.outsiders.get(hunter.sessionId ?? "") !== outsider) return
+    hunter.lastHook = sightingOf(event, input.tool_name)
+    if (isPermissionMode(input.permission_mode)) hunter.permissionMode = input.permission_mode
+    await this.readTranscript(outsider, input.transcript_path, slots)
+    switch (event) {
+      case "UserPromptSubmit": {
+        // A hunter back from its errand is on a new one: which contract, if any, its reply will say.
+        if (isReturned(hunter)) {
+          delete hunter.rite
+          delete hunter.village
+          delete hunter.contract
+        }
+        const prompt = typeof input.prompt === "string" ? input.prompt.trim() : ""
+        if (prompt !== "") {
+          outsider.prompt = prompt
+          hunter.journal.push({ kind: "you", text: clip(prompt, MAX_TEXT) })
+        }
+        outsider.firstReply = true
+        hunter.state = "hunting"
+        break
+      }
+      case "PreToolUse":
+        this.move(hunter.id, input.tool_name === ASK_TOOL ? "awaiting-you" : "hunting")
+        break
+      case "PostToolUse":
+        this.move(hunter.id, "hunting")
+        break
+      case "PermissionRequest":
+        // Asked in its own terminal: the map shows it waits on you, and leaves the answer there.
+        this.move(hunter.id, "awaiting-you")
+        break
+      case "Stop":
+        hunter.journal.push({ kind: "result", text: "", error: false })
+        await this.cameBack(hunter.id, false)
+        break
+      case "SessionEnd":
+        this.outsiders.delete(hunter.sessionId ?? "")
+        break
+    }
+    this.changed()
+  }
+
+  /**
+   * Reads what an outside session's transcript gained since the last read: its texts and tool
+   * calls go to the journal, and the first line of its reply to a prompt, when it names a
+   * contract of its region, binds the hunter to that contract.
+   */
+  private async readTranscript(outsider: Outsider, file: unknown, slots: SlotState[]): Promise<void> {
+    if (typeof file !== "string" || !path.isAbsolute(file) || !file.endsWith(".jsonl")) return
+    if (outsider.transcript?.path !== file) {
+      outsider.transcript = { path: file, offset: 0, decoder: new StringDecoder("utf8"), partial: "" }
+    }
+    const transcript = outsider.transcript
+    const handle = await open(file, "r").catch(() => undefined)
+    if (!handle) return
+    try {
+      const { size } = await handle.stat()
+      if (size < transcript.offset) Object.assign(transcript, { offset: 0, decoder: new StringDecoder("utf8"), partial: "" })
+      const chunk = Buffer.alloc(Math.min(TRANSCRIPT_CHUNK, Math.max(0, size - transcript.offset)))
+      while (transcript.offset < size) {
+        const { bytesRead } = await handle.read(chunk, 0, Math.min(chunk.length, size - transcript.offset), transcript.offset)
+        if (bytesRead === 0) break
+        transcript.offset += bytesRead
+        const lines = (transcript.partial + transcript.decoder.write(chunk.subarray(0, bytesRead))).split("\n")
+        transcript.partial = lines.pop() ?? ""
+        for (const line of lines) this.readLine(outsider, line, slots)
+      }
+    } finally {
+      await handle.close()
+    }
+  }
+
+  /** One line of an outside session's transcript. */
+  private readLine(outsider: Outsider, line: string, slots: SlotState[]): void {
+    let message: unknown
+    try {
+      message = JSON.parse(line)
+    } catch {
+      return
+    }
+    if (typeof message !== "object" || message === null) return
+    const { type, isSidechain } = message as { type?: unknown; isSidechain?: unknown }
+    if (isSidechain === true) return
+    if (type === "user") {
+      if (isPrompt(message)) outsider.firstReply = true
+      return
+    }
+    // The turn's end comes from the Stop hook; a transcript has no result lines of its own.
+    const written = journalOf(message as StreamMessage).filter((entry) => entry.kind !== "result")
+    for (const entry of written) {
+      outsider.hunter.journal.push(entry)
+      if (entry.kind !== "said" || !outsider.firstReply) continue
+      outsider.firstReply = false
+      this.bind(outsider, entry.text.split("\n")[0]?.trim() ?? "", slots)
+    }
+  }
+
+  /**
+   * Binds an outside hunter to the contract its reply's first line names, as `/implement-slice`
+   * says it: `Slice S3: Lay the plank road`. When several villages of its region have that
+   * contract, the title picks, and then the slices file its prompt named.
+   */
+  private bind(outsider: Outsider, line: string, slots: SlotState[]): void {
+    const [, id, rest = ""] = SLICE_LINE.exec(line) ?? []
+    const region = slots.find((slot) => slot.slot === outsider.hunter.slot)
+    if (!id || region?.kind !== "region") return
+    let villages = region.villages.filter((v) => v.slices && v.contracts.some((c) => c.id === id))
+    const narrow = (keep: (village: Village) => boolean) => {
+      const kept = villages.filter(keep)
+      if (kept.length > 0) villages = kept
+    }
+    if (villages.length > 1) narrow((v) => rest.startsWith(v.contracts.find((c) => c.id === id)?.title ?? "\0"))
+    const prompt = outsider.prompt
+    if (villages.length > 1 && prompt) narrow((v) => v.slices !== undefined && prompt.includes(v.slices))
+    const [village] = villages
+    if (!village || villages.length > 1) return
+    Object.assign(outsider.hunter, { rite: "implement-slice", village: village.slug, contract: id })
   }
 
   /**
@@ -479,7 +726,7 @@ export class Hunters {
     const entry = id ? this.out.get(id) : undefined
     const tool = request.input.tool_name
     if (!id || !entry || typeof tool !== "string" || tool === "") return undefined
-    entry.hunter.lastHook = { event: "PermissionRequest", tool }
+    entry.hunter.lastHook = sightingOf("PermissionRequest", tool)
     const prompt: PermissionPrompt = { id: randomUUID(), tool, input: promptInput(request.input.tool_input) }
     const decision = new Promise<PermissionAnswer | undefined>((settle) => entry.asking.push({ prompt, settle }))
     this.showPrompt(id)
@@ -536,7 +783,7 @@ export class Hunters {
    */
   see(slots: SlotState[]): boolean {
     let changed = false
-    for (const { hunter } of this.out.values()) {
+    for (const hunter of this.list()) {
       if (hunter.state === "returned-trophy" || hunter.contract === undefined) continue
       const region = slots.find((slot) => slot.slot === hunter.slot)
       if (region?.kind !== "region") continue
@@ -583,24 +830,24 @@ export class Hunters {
    * comes back with a trophy unless its turn `failed`.
    */
   private async cameBack(id: string, failed: boolean): Promise<void> {
-    const entry = this.out.get(id)
-    if (!entry) return
-    if (entry.hunter.contract === undefined) {
+    const hunter = this.find(id)
+    if (!hunter) return
+    if (hunter.contract === undefined) {
       this.move(id, failed ? "returned-wounded" : "returned-trophy")
       return
     }
     let state: ContractState | undefined
     try {
-      state = await this.lookup(entry.hunter)
+      state = await this.lookup(hunter)
     } catch (error) {
-      console.error(`guslar: could not read ${entry.hunter.name}'s contract: ${(error as Error).message}`)
+      console.error(`guslar: could not read ${hunter.name}'s contract: ${(error as Error).message}`)
     }
-    this.move(id, paid(entry.hunter.rite, state) ? "returned-trophy" : "returned-wounded")
+    this.move(id, paid(hunter.rite, state) ? "returned-trophy" : "returned-wounded")
   }
 
   /** Moves a hunter to a new state and says so to the map; returns whether it moved. */
   private move(id: string, state: HunterState): boolean {
-    const hunter = this.out.get(id)?.hunter
+    const hunter = this.find(id)
     if (!hunter || hunter.state === state || settled(hunter)) return false
     // A hunter with a prompt out waits on you, whatever else its session says meanwhile.
     if (hunter.prompt && state === "hunting") return false
@@ -609,8 +856,16 @@ export class Hunters {
     return true
   }
 
-  /** Sends a returned hunter home: it leaves the map now, and its claude exits once its stdin ends. */
+  /**
+   * Sends a returned hunter home: it leaves the map now, and its claude exits once its stdin ends.
+   * An outside session goes on in its own terminal, and is seen afresh at its next prompt.
+   */
   private dismiss(id: string): void {
+    const outsider = this.outsiderOf(id)
+    if (outsider) {
+      this.outsiders.delete(outsider.hunter.sessionId ?? "")
+      return
+    }
     const entry = this.out.get(id)
     if (!entry) return
     this.release(id)

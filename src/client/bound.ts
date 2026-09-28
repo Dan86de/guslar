@@ -15,6 +15,8 @@ export function boundOf(world: WorldState, hunter: Hunter): { what: string; wher
   const title = village?.contracts.find((c) => c.id === hunter.contract)?.title
   const contract = `${hunter.contract ?? ""}${title ? ` ${title}` : ""}`
   switch (hunter.rite) {
+    case undefined:
+      return { what: "A session started outside Guslar", where }
     case "implement-slice":
       return { what: contract, where }
     case "sign-off":
@@ -27,10 +29,15 @@ export function boundOf(world: WorldState, hunter: Hunter): { what: string; wher
 /**
  * What a hunter is out for, as the map's list says it right after its state: ` on S3 of Drain the
  * bog` for a hunt, or `, sent to post contracts for Drain the bog` and `, sent to hear the
- * villagers in Bogwater Reach` for a rite.
+ * villagers in Bogwater Reach` for a rite. A session started outside Guslar says so after it:
+ * ` in Bogwater Reach, started outside Guslar` until it is seen on a contract.
  */
 export function outFor(world: WorldState, hunter: Hunter): string {
   const { where } = boundOf(world, hunter)
+  if (hunter.outside) {
+    const errand = hunter.rite === undefined ? ` in ${where}` : ` ${errandOf(hunter)} of ${where}`
+    return `${errand}, started outside Guslar`
+  }
   if (hunter.rite === "implement-slice") return ` ${errandOf(hunter)} of ${where}`
   return `, sent ${errandOf(hunter)} ${hunter.village === undefined ? "in" : "for"} ${where}`
 }
