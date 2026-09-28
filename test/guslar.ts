@@ -83,6 +83,29 @@ export async function startGuslar(
   }
 }
 
+/**
+ * Starts a claude in `cwd` the way a user does in a terminal: this Guslar's HOME, and nothing of
+ * Guslar's own in its environment, so the map sees the session only through the hooks its repo runs.
+ */
+export function startOutside(
+  guslar: Running,
+  cwd: string,
+  session: { transcript: string; gates: string; prompt: string },
+): ChildProcess {
+  return spawn(process.execPath, [path.join(fixtures, "fake-claude.mjs")], {
+    cwd,
+    env: {
+      PATH: process.env.PATH,
+      HOME: guslar.home,
+      FAKE_CLAUDE_LOG: guslar.claudeLog,
+      FAKE_CLAUDE_TRANSCRIPT: session.transcript,
+      FAKE_CLAUDE_GATES: session.gates,
+      FAKE_CLAUDE_PROMPT: session.prompt,
+    },
+    stdio: "ignore",
+  })
+}
+
 /** Runs Guslar expecting it to refuse to start, and returns what it said. */
 export function failGuslar(args: string[]): Promise<{ code: number | null; output: string }> {
   return runGuslar(["--port", "0", "--no-open", ...args])

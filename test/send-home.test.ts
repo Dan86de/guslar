@@ -1,3 +1,4 @@
+import type { ChildProcess } from "node:child_process"
 import { randomUUID } from "node:crypto"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { request } from "node:http"
@@ -5,7 +6,17 @@ import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 import type { Hunter, TakeRequest, WorldState } from "../src/shared/world.js"
 import { bogwater, type FixtureRegion } from "./fixture-region.js"
-import { awaitWorld, fixtures, receiveWorld, runGuslar, startGuslar, tempDir, waitFor, type Running } from "./guslar.js"
+import {
+  awaitWorld,
+  fixtures,
+  receiveWorld,
+  runGuslar,
+  startGuslar,
+  startOutside,
+  tempDir,
+  waitFor,
+  type Running,
+} from "./guslar.js"
 
 const TRANSCRIPT = path.join(fixtures, "transcripts", "implement-slice.jsonl")
 
@@ -14,6 +25,18 @@ const ASKING = path.join(fixtures, "transcripts", "permission.jsonl")
 
 /** The session the transcript's claude says it runs, which a terminal resumes. */
 const SESSION = "5e0920e1-2e63-4115-9bdd-15547dc23f10"
+
+/** The transcript of a session a user started in a terminal of their own, which Guslar only ever sees through hooks. */
+const OUTSIDE = path.join(fixtures, "transcripts", "outside.jsonl")
+
+/** What that user asked it, whose slices file says which village the contract its reply names belongs to. */
+const OUTSIDE_PROMPT = "/implement-slice .scratch/slices/drain-the-bog.json"
+
+/** The session the outside transcript's hooks name, which is the only handle the map holds it by. */
+const OUTSIDE_SESSION = "c3d9e0a4-7b2f-4e61-8d15-2a9f6b7c4e83"
+
+/** The gates the outside replay waits at on its way back with a trophy; `stop` ends its turn, `end` its session. */
+const OUTSIDE_UNDER_WAY = ["prompt", "permission", "allow"]
 
 /** The gates the replay waits at on its way to hunting; `end` stays shut, so its turn is still under way. */
 const UNDER_WAY = ["hunt", "permission", "allow", "question", "answer"]
@@ -84,7 +107,10 @@ async function readWorld(guslar: Running): Promise<WorldState> {
 
 describe("send a hunter home", () => {
   let guslar: Running | undefined
+  let session: ChildProcess | undefined
   afterEach(async () => {
+    session?.kill()
+    session = undefined
     await guslar?.stop()
     guslar = undefined
   })
@@ -117,6 +143,32 @@ describe("send a hunter home", () => {
     writeFileSync(path.join(gates, "hunt"), "")
     await awaitWorld(running.url, (w) => w.hunters.some((h) => h.id === id && h.state === "hunting"))
     return id
+  }
+
+  /** A world of one Bogwater, with its hooks installed, so a session started in it is seen at all. */
+  async function withHooks(): Promise<{ running: Running; bog: FixtureRegion; gates: string }> {
+    const bog = bogwater()
+    const world = layDown(bog)
+    expect((await runGuslar(["hooks", "install", "--world", world])).code).toBe(0)
+    const running = await startGuslar(["--no-open", "--world", world])
+    guslar = running
+    return { running, bog, gates: tempDir() }
+  }
+
+  /**
+   * Starts a session outside Guslar in Bogwater, lets it reach for its tool and lands the commit
+   * its contract is paid by, so its hunter is back with a trophy while the session runs on.
+   */
+  async function backFromOutside(running: Running, bog: FixtureRegion, gates: string): Promise<Hunter> {
+    const seen = (until: (hunter: Hunter) => boolean) =>
+      awaitWorld(running.url, (w) => w.hunters.some((h) => h.outside === true && until(h))).then(
+        (w) => w.hunters.find((h) => h.outside === true) as Hunter,
+      )
+    for (const name of OUTSIDE_UNDER_WAY) writeFileSync(path.join(gates, name), "")
+    session = startOutside(running, bog.repo, { transcript: OUTSIDE, gates, prompt: OUTSIDE_PROMPT })
+    await seen((h) => h.contract === "S3" && h.lastHook?.event === "PostToolUse")
+    bog.commit("Lay the plank road", "Slice S3 of .scratch/specs/drain-the-bog.md.", "Slice: S3")
+    return seen((h) => h.state === "returned-trophy")
   }
 
   it("takes a returned hunter out of the world and the broadcast, and lets its session go", async () => {
@@ -315,5 +367,45 @@ describe("send a hunter home", () => {
     // The hunter stayed, and the map this Guslar does serve still sends it home.
     expect((await readWorld(running)).hunters.map((h) => h.id)).toEqual([id])
     expect((await sendHome(running, id)).status).toBe(200)
+  })
+
+  it("sends home a hunter made from an outside session, and leaves the session itself running", async () => {
+    const { running, bog, gates } = await withHooks()
+    const hunter = await backFromOutside(running, bog, gates)
+    expect(hunter).toMatchObject({ outside: true, sessionId: OUTSIDE_SESSION, contract: "S3", state: "returned-trophy" })
+
+    // The same door the map presses for a hunter of Guslar's own, and the same answer back.
+    const sent = await sendHome(running, hunter.id)
+    expect(sent.status).toBe(200)
+    expect(sent.body.hunter).toMatchObject({ id: hunter.id, name: "Wojmir", outside: true, state: "returned-trophy" })
+
+    await awaitWorld(running.url, (w) => w.hunters.length === 0)
+    expect((await readWorld(running)).hunters).toEqual([])
+
+    // Unlinked, not ended: Guslar never held this session's stdin, so its claude runs on in its
+    // own terminal. What went is the map's record of it.
+    expect(session?.exitCode).toBeNull()
+  })
+
+  it("is told nothing of it, so a session still running is seen afresh at its next hook event", async () => {
+    const { running, bog, gates } = await withHooks()
+    const hunter = await backFromOutside(running, bog, gates)
+    expect((await sendHome(running, hunter.id)).status).toBe(200)
+    await awaitWorld(running.url, (w) => w.hunters.length === 0)
+
+    // Its turn ends, and its Stop hook names a session the map no longer holds: it is seen as one
+    // Guslar has never met, so it rides in again on an id of its own, with the name it gave back.
+    const again = awaitWorld(running.url, (w) => w.hunters.length === 1)
+    writeFileSync(path.join(gates, "stop"), "")
+    const back = (await again).hunters[0]
+    expect(back).toMatchObject({
+      name: "Wojmir",
+      outside: true,
+      sessionId: OUTSIDE_SESSION,
+      contract: "S3",
+      state: "returned-trophy",
+      lastHook: { event: "Stop" },
+    })
+    expect(back?.id).not.toBe(hunter.id)
   })
 })

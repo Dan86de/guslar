@@ -1,10 +1,10 @@
-import { spawn, type ChildProcess } from "node:child_process"
+import type { ChildProcess } from "node:child_process"
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 import type { Hunter, WorldState } from "../src/shared/world.js"
 import { bogwater } from "./fixture-region.js"
-import { awaitWorld, fixtures, receiveWorld, runGuslar, startGuslar, tempDir, waitFor, type Running } from "./guslar.js"
+import { awaitWorld, fixtures, receiveWorld, runGuslar, startGuslar, startOutside, tempDir, waitFor, type Running } from "./guslar.js"
 
 const SESSION = "c3d9e0a4-7b2f-4e61-8d15-2a9f6b7c4e83"
 
@@ -14,23 +14,12 @@ function worldOf(repo: string): string {
   return file
 }
 
-/**
- * Starts a claude in `cwd` the way a user does in a terminal: their HOME, and nothing of Guslar's
- * in its environment. It replays the outside session's transcript, running the repo's hooks.
- */
-function startOutside(guslar: Running, cwd: string, gates: string): ChildProcess {
-  return spawn(process.execPath, [path.join(fixtures, "fake-claude.mjs")], {
-    cwd,
-    env: {
-      PATH: process.env.PATH,
-      HOME: guslar.home,
-      FAKE_CLAUDE_LOG: guslar.claudeLog,
-      FAKE_CLAUDE_TRANSCRIPT: path.join(fixtures, "transcripts", "outside.jsonl"),
-      FAKE_CLAUDE_GATES: gates,
-      FAKE_CLAUDE_PROMPT: "/implement-slice .scratch/slices/drain-the-bog.json",
-    },
-    stdio: "ignore",
-  })
+/** What the user asked the session, whose slices file says which village its contract belongs to. */
+const PROMPT = "/implement-slice .scratch/slices/drain-the-bog.json"
+
+/** Starts the session of this file: the outside transcript, replayed against the run's gates. */
+function startSession(guslar: Running, cwd: string, gates: string): ChildProcess {
+  return startOutside(guslar, cwd, { transcript: path.join(fixtures, "transcripts", "outside.jsonl"), gates, prompt: PROMPT })
 }
 
 function outsider(world: WorldState): Hunter | undefined {
@@ -69,7 +58,7 @@ describe("a session started outside Guslar", () => {
   it("appears as a hunter in its region on its SessionStart, with no journal to type into", async () => {
     const { running, bog, gates } = await start()
     const seen = awaitWorld(running.url, (w) => outsider(w) !== undefined)
-    session = startOutside(running, bog.repo, gates)
+    session = startSession(running, bog.repo, gates)
     const hunter = outsider(await seen)
     expect(hunter).toMatchObject({
       name: "Wojmir",
@@ -127,7 +116,7 @@ describe("a session started outside Guslar", () => {
     const open = (gate: string) => writeFileSync(path.join(gates, gate), "open")
 
     const riding = at((h) => h.state === "riding-out")
-    session = startOutside(running, bog.repo, gates)
+    session = startSession(running, bog.repo, gates)
     expect((await riding).contract).toBeUndefined()
 
     // Its first reply line names S3, and the prompt's slices file says which village's.
@@ -139,7 +128,7 @@ describe("a session started outside Guslar", () => {
       contract: "S3",
       state: "hunting",
       journal: [
-        { kind: "you", text: "/implement-slice .scratch/slices/drain-the-bog.json" },
+        { kind: "you", text: PROMPT },
         { kind: "said", text: "Slice S3: Lay the plank road (also ready: S2)" },
         { kind: "tool", tool: "Bash", input: "git status --short" },
       ],
@@ -200,7 +189,7 @@ describe("a session started outside Guslar", () => {
     const { running, bog, gates } = await start()
     for (const gate of ["prompt", "permission", "allow", "stop"]) writeFileSync(path.join(gates, gate), "open")
     const wounded = awaitWorld(running.url, (w) => outsider(w)?.state === "returned-wounded")
-    session = startOutside(running, bog.repo, gates)
+    session = startSession(running, bog.repo, gates)
     expect(outsider(await wounded)).toMatchObject({ contract: "S3", lastHook: { event: "Stop" } })
     const [s3] = (await receiveWorld(running.url)).slots.flatMap((slot) =>
       slot.kind === "region" ? slot.villages.flatMap((v) => v.contracts.filter((c) => v.slug === "drain-the-bog" && c.id === "S3")) : [],
