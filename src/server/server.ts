@@ -37,6 +37,9 @@ const MAX_BODY = 64 * 1024
  */
 const MAX_HOOK_BODY = 16 * 1024 * 1024
 
+/** Where a map sends one hunter home: `/api/hunters/<id>`. */
+const HUNTER = /^\/api\/hunters\/([0-9a-f-]{36})$/
+
 /** Where a map writes to one hunter: `/api/hunters/<id>/replies`. */
 const REPLIES = /^\/api\/hunters\/([0-9a-f-]{36})\/replies$/
 
@@ -217,6 +220,21 @@ export async function startServer(options: {
   }
 
   /**
+   * Sends a hunter home. It carries nothing to say, so this reads no body, and passes the test
+   * `bodyOf` would have applied: a request that did not come from the map this Guslar serves is
+   * refused, since sending a hunter home lets go of its session.
+   */
+  const sendHome = (id: string, req: IncomingMessage, res: ServerResponse): void => {
+    if (!fromOwnMap(req)) {
+      sendJson(res, 403, { error: "Only the map this Guslar serves may send a hunter home." })
+      return
+    }
+    const result = hunters.sendHome(id)
+    if ("hunter" in result) sendJson(res, 200, result)
+    else sendJson(res, result.status, { error: result.error })
+  }
+
+  /**
    * A hook event from a session. A permission request from a hunter is held open until you
    * answer it on the map, and its hook gets your decision; if the hook goes before you answer,
    * the prompt goes with it.
@@ -299,6 +317,16 @@ export async function startServer(options: {
         return
       }
       res.writeHead(405, { allow: "POST" })
+      res.end()
+      return
+    }
+    const goingHome = HUNTER.exec(req.url ?? "")?.[1]
+    if (goingHome) {
+      if (req.method === "DELETE") {
+        sendHome(goingHome, req, res)
+        return
+      }
+      res.writeHead(405, { allow: "DELETE" })
       res.end()
       return
     }
