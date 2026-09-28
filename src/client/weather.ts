@@ -14,6 +14,7 @@ export class WeatherLayer {
   private readonly tileSize: number
   private elapsedMs = 0
   private sinceStep = 0
+  private held = false
 
   /** `fogTexture` is the fog composite's texture, used here as the shape the drift shows through. */
   constructor(fogArt: HTMLImageElement, fogTexture: Texture, ticker: Ticker) {
@@ -42,7 +43,18 @@ export class WeatherLayer {
     })
   }
 
+  /**
+   * Holds the weather where it stands, or lets it blow again.
+   *
+   * Held, the layers are given no time at all, so the cloud is exactly where the last frame
+   * left it and letting it go carries on from there rather than catching up.
+   */
+  hold(held: boolean): void {
+    this.held = held
+  }
+
   private frame(deltaMs: number): void {
+    if (this.held) return
     // Time the ticker reported is never dropped, only held back until a step is due.
     this.sinceStep += deltaMs
     if (this.sinceStep < DRIFT_STEP_MS) return

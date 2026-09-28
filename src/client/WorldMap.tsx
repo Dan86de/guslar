@@ -121,6 +121,7 @@ export function WorldMap({
     const app = new Application()
     let onResize: (() => void) | undefined
     let onVisibility: (() => void) | undefined
+    let stopStillness: (() => void) | undefined
 
     void (async () => {
       const [, mapImage, fogImage, flareImage, ...images] = await Promise.all([
@@ -242,10 +243,30 @@ export function WorldMap({
         layFog()
       })
 
+      // Asking the system for less motion turns the weather off, and that setting is the whole
+      // switch: there is nothing in `world.json` about it and nothing on the page to click. Off,
+      // the cloud is held where it stands and the reveal is spent before anyone sees it, so the
+      // fog simply lies where it stays. Read again whenever it changes, so a map already open
+      // goes still, and letting motion back lets that same cloud blow on from where it stopped.
+      const stillness = window.matchMedia("(prefers-reduced-motion: reduce)")
+      const onStillness = () => {
+        weather.hold(stillness.matches)
+        // A reveal already under way ends here, rather than easing on under a setting that
+        // has just asked it not to.
+        if (!stillness.matches || revealMs === undefined || revealMs >= REVEAL_MS) return
+        revealMs = REVEAL_MS
+        layFog()
+      }
+      stillness.addEventListener("change", onStillness)
+      onStillness()
+      stopStillness = () => stillness.removeEventListener("change", onStillness)
+
       setScene({
         villageAspect,
         show(world) {
-          if (revealMs === undefined) revealMs = 0
+          // The reveal's clock is spent before it starts when the setting is on, so the first
+          // world lays the fog straight down where it stays.
+          if (revealMs === undefined) revealMs = stillness.matches ? REVEAL_MS : 0
           shown = world
           layFog()
 
@@ -272,6 +293,7 @@ export function WorldMap({
     return () => {
       life.cancelled = true
       if (onVisibility) document.removeEventListener("visibilitychange", onVisibility)
+      if (stopStillness) stopStillness()
       if (onResize) {
         app.renderer.off("resize", onResize)
         app.destroy(true, { children: true, texture: true })
