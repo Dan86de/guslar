@@ -17,6 +17,8 @@ import { featheredMap, FogLayer } from "./fog.js"
 import { fitMap, hunterGround, labelAnchor, MAP_SIZE, regionGround, villageSpots, type View } from "./geometry.js"
 import { HUNTER_STATE_NAMES } from "./hunterStates.js"
 import { HunterLayer, isOut, POSES, RIDE_MS, type HunterPlace, type Pose } from "./hunters.js"
+import { REVEAL_MS, REVEAL_STEP_MS, revealProgress } from "./reveal.js"
+import { WeatherLayer } from "./weather.js"
 
 /** What the map needs from the Pixi scene once it is built. */
 type Scene = {
@@ -118,6 +120,8 @@ export function WorldMap({
     const life = { cancelled: false }
     const app = new Application()
     let onResize: (() => void) | undefined
+    let onVisibility: (() => void) | undefined
+    let stopStillness: (() => void) | undefined
 
     void (async () => {
       const [, mapImage, fogImage, flareImage, ...images] = await Promise.all([
@@ -174,10 +178,15 @@ export function WorldMap({
       const villages = new Container()
       board.addChild(villages)
 
-      const fog = new FogLayer(fogImage)
-      const fogSprite = new Sprite(Texture.from(fog.canvas))
-      fogSprite.visible = false
+      const fog = new FogLayer()
+      const fogTexture = Texture.from(fog.canvas)
+      const fogSprite = new Sprite(fogTexture)
       board.addChild(fogSprite)
+
+      // The cloud art drifts over the fog's body, masked by the very same texture, so
+      // the weather is only ever seen inside the outline the composite already has.
+      const weather = new WeatherLayer(fogImage, fogTexture, app.ticker)
+      board.addChild(weather.container)
 
       // Hunters stand over the fog: they only ride in claimed regions, and one hunting at the
       // edge of its region must not fade into a neighbour's fog rim.
@@ -198,12 +207,68 @@ export function WorldMap({
       }
       onResize()
       app.renderer.on("resize", onResize)
+
+      // A window left open all day spends most of it behind another one, and there is no
+      // one to show a frame to while it does. Everything that moves on the map is placed
+      // from time the ticker reported, so stopping the ticker holds the weather and the
+      // hunters where the last frame left them, and starting it again reports the frame
+      // after the pause rather than the pause itself: the drift carries on, never skips.
+      onVisibility = () => {
+        if (document.hidden) app.ticker.stop()
+        else app.ticker.start()
+      }
+      document.addEventListener("visibilitychange", onVisibility)
+      onVisibility()
+
+      // The map arrives under fog over every slot, and gives the claimed ones up once, as the
+      // world's first broadcast tells it which they are. `shown` is the last world the fog was
+      // laid out for; `revealMs` is undefined until that first world, so the clock starts when
+      // there is something to uncover and runs down only once. A dropped socket brings another
+      // world, never another reveal: by then the clock is spent and the fog is where it stays.
+      let shown: WorldState | undefined
+      let revealMs: number | undefined
+      let sinceStep = 0
+      const layFog = () => {
+        fog.compose(shown, revealProgress(revealMs ?? 0))
+        fogSprite.texture.source.update()
+      }
+      layFog()
+      app.ticker.add((tick) => {
+        if (revealMs === undefined || revealMs >= REVEAL_MS) return
+        revealMs += tick.deltaMS
+        sinceStep += tick.deltaMS
+        // Held back until a step is due, or until the fog has arrived where it stays.
+        if (sinceStep < REVEAL_STEP_MS && revealMs < REVEAL_MS) return
+        sinceStep = 0
+        layFog()
+      })
+
+      // Asking the system for less motion turns the weather off, and that setting is the whole
+      // switch: there is nothing in `world.json` about it and nothing on the page to click. Off,
+      // the cloud is held where it stands and the reveal is spent before anyone sees it, so the
+      // fog simply lies where it stays. Read again whenever it changes, so a map already open
+      // goes still, and letting motion back lets that same cloud blow on from where it stopped.
+      const stillness = window.matchMedia("(prefers-reduced-motion: reduce)")
+      const onStillness = () => {
+        weather.hold(stillness.matches)
+        // A reveal already under way ends here, rather than easing on under a setting that
+        // has just asked it not to.
+        if (!stillness.matches || revealMs === undefined || revealMs >= REVEAL_MS) return
+        revealMs = REVEAL_MS
+        layFog()
+      }
+      stillness.addEventListener("change", onStillness)
+      onStillness()
+      stopStillness = () => stillness.removeEventListener("change", onStillness)
+
       setScene({
         villageAspect,
         show(world) {
-          fog.compose(world)
-          fogSprite.texture.source.update()
-          fogSprite.visible = true
+          // The reveal's clock is spent before it starts when the setting is on, so the first
+          // world lays the fog straight down where it stays.
+          if (revealMs === undefined) revealMs = stillness.matches ? REVEAL_MS : 0
+          shown = world
+          layFog()
 
           for (const child of villages.removeChildren()) child.destroy()
           for (const slot of world.slots) {
@@ -227,6 +292,8 @@ export function WorldMap({
 
     return () => {
       life.cancelled = true
+      if (onVisibility) document.removeEventListener("visibilitychange", onVisibility)
+      if (stopStillness) stopStillness()
       if (onResize) {
         app.renderer.off("resize", onResize)
         app.destroy(true, { children: true, texture: true })

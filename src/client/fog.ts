@@ -6,45 +6,66 @@ import { REGION_SLOTS } from "../shared/world.js"
  * All the fog on the map, on one map-sized canvas. Each empty slot gets its own
  * cloud; then every claimed region is wiped clear, so a neighbour's feathered rim
  * never hazes a region that has a repo.
+ *
+ * This is the fog's body and its shape, but not its hatching: the cloud art drifts
+ * over it, and shows through exactly this much of it (`WeatherLayer`, `weather.ts`).
  */
 export class FogLayer {
   readonly canvas: HTMLCanvasElement
   private readonly clouds = new Map<RegionSlot, HTMLCanvasElement>()
 
-  constructor(fogArt: HTMLImageElement) {
+  constructor() {
     this.canvas = document.createElement("canvas")
     this.canvas.width = MAP_SIZE.width
     this.canvas.height = MAP_SIZE.height
-    REGION_SLOTS.forEach((slot, index) => this.clouds.set(slot, paintFog(fogArt, SLOT_AREAS[slot], index + 1)))
+    REGION_SLOTS.forEach((slot, index) => this.clouds.set(slot, paintFog(SLOT_AREAS[slot], index + 1)))
   }
 
-  compose(world: WorldState): void {
+  /**
+   * Lays the fog out over the world as it stands.
+   *
+   * `world` is undefined until the first broadcast, when the map knows of no repos and every
+   * slot is under fog. `reveal` is how far the fog has pulled off the claimed regions
+   * (`revealProgress`, `reveal.ts`): at 0 it still stands over them, at 1 it is where it stays.
+   */
+  compose(world: WorldState | undefined, reveal: number): void {
     const ctx = this.canvas.getContext("2d")
     if (!ctx) throw new Error("no 2d canvas")
     ctx.globalCompositeOperation = "source-over"
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
 
-    for (const slot of world.slots) {
-      const cloud = this.clouds.get(slot.slot)
-      if (slot.kind !== "fog" || !cloud) continue
-      const area = SLOT_AREAS[slot.slot]
+    const claimed = new Set(world?.slots.filter((slot) => slot.kind === "region").map((slot) => slot.slot))
+    for (const slot of REGION_SLOTS) {
+      const cloud = this.clouds.get(slot)
+      if (!cloud) continue
+      // A claimed region keeps its own fog until the reveal has finished taking it away,
+      // thinning as the clear below opens out through it.
+      if (claimed.has(slot)) {
+        if (reveal >= 1) continue
+        ctx.globalAlpha = 1 - reveal
+      }
+      const area = SLOT_AREAS[slot]
       ctx.drawImage(cloud, area.x - cloud.width / 2, area.y - cloud.height / 2)
+      ctx.globalAlpha = 1
     }
 
     ctx.globalCompositeOperation = "destination-out"
-    for (const slot of world.slots) {
-      if (slot.kind !== "region") continue
-      const area = clearArea(slot.slot)
-      ctx.save()
-      ctx.translate(area.x, area.y)
-      ctx.scale(area.rx, area.ry)
-      const clear = ctx.createRadialGradient(0, 0, 0, 0, 0, 1.05)
-      clear.addColorStop(0, "rgba(0,0,0,1)")
-      clear.addColorStop(0.81, "rgba(0,0,0,1)")
-      clear.addColorStop(1, "rgba(0,0,0,0)")
-      ctx.fillStyle = clear
-      ctx.fillRect(-1.05, -1.05, 2.1, 2.1)
-      ctx.restore()
+    // The clear opens from each claimed region's heart out to its edge, which is the fog
+    // pulling back off it; at 0 nothing is clear yet and the whole map lies under weather.
+    if (reveal > 0) {
+      for (const slot of claimed) {
+        const area = clearArea(slot)
+        ctx.save()
+        ctx.translate(area.x, area.y)
+        ctx.scale(area.rx * reveal, area.ry * reveal)
+        const clear = ctx.createRadialGradient(0, 0, 0, 0, 0, 1.05)
+        clear.addColorStop(0, "rgba(0,0,0,1)")
+        clear.addColorStop(0.81, "rgba(0,0,0,1)")
+        clear.addColorStop(1, "rgba(0,0,0,0)")
+        ctx.fillStyle = clear
+        ctx.fillRect(-1.05, -1.05, 2.1, 2.1)
+        ctx.restore()
+      }
     }
     fadeEdges(ctx, this.canvas.width, this.canvas.height, FOG_EDGE_FEATHER)
     ctx.globalCompositeOperation = "source-over"
@@ -91,10 +112,10 @@ function fadeEdges(ctx: CanvasRenderingContext2D, width: number, height: number,
 
 /**
  * Paints one slot's fog on a canvas a little larger than its ellipse: a misty
- * bone wash with the fog hatching over it, cut to a cloud of soft blobs so the
- * rim is lumpy like the painted mist around the map, never a clean oval.
+ * bone wash, cut to a cloud of soft blobs so the rim is lumpy like the painted
+ * mist around the map, never a clean oval.
  */
-function paintFog(fogArt: HTMLImageElement, area: Ellipse, seed: number): HTMLCanvasElement {
+function paintFog(area: Ellipse, seed: number): HTMLCanvasElement {
   const pad = 1.3
   const width = Math.ceil(area.rx * 2 * pad)
   const height = Math.ceil(area.ry * 2 * pad)
@@ -104,23 +125,13 @@ function paintFog(fogArt: HTMLImageElement, area: Ellipse, seed: number): HTMLCa
   const ctx = canvas.getContext("2d")
   if (!ctx) throw new Error("no 2d canvas")
 
-  // Bone at the heart, cooling to mist blue where it thins.
+  // Bone at the heart, cooling to mist blue where it thins, and carrying the warmth the
+  // cloud art's own cream paper used to lend it when the art was stamped in here.
   const wash = ctx.createRadialGradient(width / 2, height / 2, 0, width / 2, height / 2, Math.max(width, height) / 2)
-  wash.addColorStop(0, "rgb(214, 204, 178)")
-  wash.addColorStop(1, "rgb(170, 172, 164)")
+  wash.addColorStop(0, "rgb(212, 201, 169)")
+  wash.addColorStop(1, "rgb(169, 169, 156)")
   ctx.fillStyle = wash
   ctx.fillRect(0, 0, width, height)
-
-  // One unrepeated stretch of the fog art per slot, at an offset of its own:
-  // tiling it shows seams, and mirroring it shows kaleidoscope stars.
-  const scale = Math.max(width / fogArt.naturalWidth, height / fogArt.naturalHeight, 0.6)
-  const artWidth = fogArt.naturalWidth * scale
-  const artHeight = fogArt.naturalHeight * scale
-  const random = mulberry32(seed * 104729)
-  ctx.globalAlpha = 0.4
-  ctx.globalCompositeOperation = "multiply"
-  ctx.drawImage(fogArt, -random() * (artWidth - width), -random() * (artHeight - height), artWidth, artHeight)
-  ctx.globalAlpha = 1
 
   ctx.globalCompositeOperation = "destination-in"
   ctx.drawImage(cloudMask(width, height, area, seed), 0, 0)
