@@ -12,12 +12,32 @@ const TRANSCRIPT = path.join(fixtures, "transcripts", "implement-slice.jsonl")
 /** A transcript that stops at a permission request, so its hunter awaits you with the request still out. */
 const ASKING = path.join(fixtures, "transcripts", "permission.jsonl")
 
+/** The session the transcript's claude says it runs, which a terminal resumes. */
+const SESSION = "5e0920e1-2e63-4115-9bdd-15547dc23f10"
+
 /** The gates the replay waits at on its way to hunting; `end` stays shut, so its turn is still under way. */
 const UNDER_WAY = ["hunt", "permission", "allow", "question", "answer"]
 
 const S3: TakeRequest = { slot: "forest", village: "drain-the-bog", contract: "S3", permissionMode: "default" }
 
-type Logged = { pid: number; started?: { hunterId?: string }; ended?: boolean; hook?: { event: string } }
+/** The same contract of the other region's own Bogwater, so its hunter is sent where no hunter stands. */
+const S3_OVER_THE_RIVER: TakeRequest = { ...S3, slot: "river-town" }
+
+/** The slots a laid-down world fills, in the order the regions are given. */
+const SLOTS = ["forest", "river-town"] as const
+
+/** A rite on Bogwater's other village, which has a bounty drafted and no contracts posted yet. */
+const POST_CONTRACTS: TakeRequest = { slot: "forest", rite: "write-slices", village: "ward-the-well", permissionMode: "default" }
+
+type Logged = {
+  pid: number
+  started?: { hunterId?: string }
+  ended?: boolean
+  hook?: { event: string }
+  /** The claude a terminal resumed the session in, which records the terminal it runs in and its hang-up. */
+  tty?: { term?: string }
+  hungUp?: boolean
+}
 
 function claudeLog(guslar: Running): Logged[] {
   return readFileSync(guslar.claudeLog, "utf8")
@@ -46,6 +66,16 @@ async function sendHome(guslar: Running, id: string): Promise<{ status: number; 
   return { status: res.status, body: (await res.json()) as { hunter?: Hunter; error?: string } }
 }
 
+/** Opens a hunter's terminal the way its journal does, so a claude resumes its session in a PTY. */
+async function openTerminal(guslar: Running, id: string): Promise<number> {
+  const res = await fetch(new URL(`/api/hunters/${id}/terminal`, guslar.url), {
+    method: "POST",
+    headers: asTheMap(guslar),
+    body: "{}",
+  })
+  return res.status
+}
+
 /** The world as the map reads it over HTTP, beside the broadcast it follows. */
 async function readWorld(guslar: Running): Promise<WorldState> {
   const res = await fetch(new URL("/api/world", guslar.url), { headers: { origin: new URL(guslar.url).origin } })
@@ -63,10 +93,11 @@ describe("send a hunter home", () => {
     return startGuslar(["--no-open", "--world", world], home, { FAKE_CLAUDE_TRANSCRIPT: TRANSCRIPT, FAKE_CLAUDE_GATES: gates })
   }
 
-  /** A world of one region, Bogwater in the forest slot, with the roll kept beside it. */
-  function layDown(bog: FixtureRegion): string {
+  /** A world of a Bogwater in the forest slot, and a second one over the river when there is one, with the roll kept beside it. */
+  function layDown(...bogs: FixtureRegion[]): string {
     const world = path.join(tempDir(), "world.json")
-    writeFileSync(world, JSON.stringify({ regions: [{ slot: "forest", repo: bog.repo }] }))
+    const regions = bogs.map((bog, i) => ({ slot: SLOTS[i], repo: bog.repo }))
+    writeFileSync(world, JSON.stringify({ regions }))
     return world
   }
 
@@ -133,6 +164,53 @@ describe("send a hunter home", () => {
     running = await start(world, home, gates)
     guslar = running
     expect((await receiveWorld(running.url)).hunters).toEqual([])
+  })
+
+  it("gives its name back, so the next hunter sent takes it rather than the next one along", async () => {
+    const bog = bogwater()
+    const overTheRiver = bogwater()
+    const gates = tempDir()
+    const running = await start(layDown(bog, overTheRiver), tempDir(), gates)
+    guslar = running
+
+    const id = await backWithATrophy(running, bog, gates)
+
+    // A returned hunter still holds its name: a hunter sent where it does not stand takes the next one.
+    expect((await take(running, S3_OVER_THE_RIVER))?.name).toBe("Bogna")
+    expect((await sendHome(running, id)).status).toBe(200)
+
+    // With Wojmir gone the name is at the head of the list again. Sending another hunter to the
+    // village it left is not what frees it: this one goes to a village it never stood in.
+    const next = await take(running, POST_CONTRACTS)
+    expect(next).toMatchObject({ name: "Wojmir", slot: "forest", village: "ward-the-well" })
+
+    // One Wojmir on the map, the new one, beside the hunter that was sent while the old one stood.
+    const world = await awaitWorld(running.url, (w) => w.hunters.length === 2)
+    expect(world.hunters.map((h) => h.name).sort()).toEqual(["Bogna", "Wojmir"])
+    expect(world.hunters.find((h) => h.name === "Wojmir")?.id).toBe(next?.id)
+  })
+
+  it("hangs up a terminal open on the hunter, so nothing is left attached to the session it let go", async () => {
+    const bog = bogwater()
+    const gates = tempDir()
+    const running = await start(layDown(bog), tempDir(), gates)
+    guslar = running
+
+    const id = await backWithATrophy(running, bog, gates)
+    await awaitWorld(running.url, (w) => w.hunters.some((h) => h.id === id && h.sessionId === SESSION))
+    expect(await openTerminal(running, id)).toBe(201)
+    await awaitWorld(running.url, (w) => w.hunters.some((h) => h.id === id && h.terminal?.state === "open"))
+    const resumed = await waitFor(() => claudeLog(running).find((entry) => entry.tty), "the resumed claude to see its terminal")
+
+    expect((await sendHome(running, id)).status).toBe(200)
+
+    // The terminal is hung up, as its window closing does, so the claude resumed in it exits too.
+    await waitFor(
+      () => claudeLog(running).find((entry) => entry.pid === resumed.pid && entry.hungUp),
+      "the terminal's claude to be hung up on",
+    )
+    // The hunter the terminal stood on is off the map, so the map has no terminal left to show.
+    expect((await readWorld(running)).hunters).toEqual([])
   })
 
   it("refuses a hunter that is still out, which stays on the map with its journal", async () => {
