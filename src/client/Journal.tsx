@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type SyntheticEvent } from "react"
-import type { Hunter, JournalEntry, ReplyRequest } from "../shared/world.js"
+import { isReturned, type Hunter, type JournalEntry, type ReplyRequest } from "../shared/world.js"
 import { HUNTER_STATE_NAMES } from "./hunterStates.js"
 
 /** Sends a reply to the server, and returns why it was refused, or nothing when the hunter got it. */
@@ -17,6 +17,21 @@ async function sendReply(hunter: Hunter, text: string): Promise<string | undefin
   } catch {
     return "The road to the server is cut. Try again once it is back."
   }
+}
+
+/**
+ * Sends a hunter home: it leaves the map, and its session is let go. The journal closes first, so
+ * there is nowhere left to show a refusal, and none is left to show: the button is offered only
+ * once a hunter has come back, which leaves a hunter the map has already lost, and a server that is
+ * gone, which the map says itself.
+ */
+function sendHome(hunter: Hunter): void {
+  // It carries nothing to say, and still says it in JSON: the content type is what marks the
+  // request as this map's, since a page elsewhere cannot send one without a preflight.
+  void fetch(`/api/hunters/${hunter.id}`, {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+  }).catch(() => undefined)
 }
 
 function Entry({ entry, hunter }: { entry: JournalEntry; hunter: Hunter }) {
@@ -80,10 +95,16 @@ export function Journal({
   const dialog = useRef<HTMLDialogElement>(null)
   const entries = useRef<HTMLOListElement>(null)
   const heading = useId()
+  const refusal = useId()
   const [draft, setDraft] = useState("")
   const [sending, setSending] = useState(false)
   const [problem, setProblem] = useState<string>()
   const atEnd = useRef(true)
+
+  // Only a hunter that has come back goes home: one still out may hold a permission request, and
+  // letting go of an unanswered request is read by its hook as Guslar being gone, which allows it.
+  const back = isReturned(hunter)
+  const stillOut = `${hunter.name} is still out: it can only be sent home once it is back.`
 
   // A layout effect, not a passive one: React runs every layout effect before any passive effect,
   // so showing the dialog here is what lets the effect below measure it. Shown passively, it is
@@ -143,17 +164,41 @@ export function Journal({
         </p>
         <div className="journal-status">
           <p className="journal-state">{HUNTER_STATE_NAMES[hunter.state]}</p>
-          {!hunter.outside && (
+          <div className="journal-acts">
+            {!hunter.outside && (
+              <button
+                type="button"
+                className="journal-act"
+                disabled={!hunter.sessionId}
+                title={hunter.sessionId ? undefined : `${hunter.name}'s session has not begun yet.`}
+                onClick={onOpenTerminal}
+              >
+                Open in terminal
+              </button>
+            )}
             <button
               type="button"
-              className="journal-terminal"
-              disabled={!hunter.sessionId}
-              title={hunter.sessionId ? undefined : `${hunter.name}'s session has not begun yet.`}
-              onClick={onOpenTerminal}
+              className="journal-act"
+              disabled={!back}
+              title={back ? undefined : stillOut}
+              // A title is read by a pointer alone, so the same words stand in the page for the
+              // button's description, as the only thing that says why it is refused.
+              aria-describedby={back ? undefined : refusal}
+              onClick={() => {
+                // The journal closes first, so focus goes back to whatever opened it. Left to the
+                // hunter leaving the world, the leaf would be torn out with no close at all.
+                dialog.current?.close()
+                sendHome(hunter)
+              }}
             >
-              Open in terminal
+              Send home
             </button>
-          )}
+            {!back && (
+              <p id={refusal} className="visually-hidden">
+                {stillOut}
+              </p>
+            )}
+          </div>
         </div>
         <button type="button" className="journal-close" aria-label="Close the journal" onClick={() => dialog.current?.close()}>
           Close

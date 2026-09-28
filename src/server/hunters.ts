@@ -54,6 +54,9 @@ export type AnswerResult = { answered: PermissionPrompt } | { status: number; er
  */
 export type TerminalResult = { hunter: Hunter; opened: boolean } | { status: number; error: string }
 
+/** What sending a hunter home came to: the hunter that went, or why it stayed, with the HTTP status that says so. */
+export type SendHomeResult = { hunter: Hunter } | { status: number; error: string }
+
 /**
  * A permission request its hunter's hook is waiting on: `decision` settles with your answer, or
  * with none when the prompt goes unanswered (the hook gave up, or the hunter left the map), and
@@ -968,6 +971,27 @@ export class Hunters {
     hunter.state = state
     this.changed()
     return true
+  }
+
+  /**
+   * Sends a hunter home at your asking: it leaves the map now, and its session is let go. Sending
+   * another hunter to its village is the only other thing that clears one, and a village whose
+   * contracts are all taken is never sent to again, so its last hunter has no other way off the map.
+   *
+   * Only a hunter that has come back goes. A hunter still out may hold a permission request, and
+   * `release` settles it with no decision, which its hook reads as Guslar being unreachable and
+   * allows the call: sending home a hunter awaiting you would grant what you were about to deny.
+   */
+  sendHome(id: string): SendHomeResult {
+    const hunter = this.find(id)
+    if (!hunter) return { status: 404, error: "No such hunter is out." }
+    if (!isReturned(hunter)) {
+      return { status: 409, error: `${hunter.name} is still out: it can only be sent home once it is back.` }
+    }
+    this.dismiss(id)
+    // `dismiss` keeps the roll; every open map hears of it here.
+    this.changed()
+    return { hunter }
   }
 
   /**
