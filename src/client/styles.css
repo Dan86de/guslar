@@ -753,9 +753,9 @@ button.plaque:focus-visible {
 
 .journal-status {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   align-items: center;
-  justify-content: space-between;
   margin-top: 8px;
 }
 
@@ -763,7 +763,16 @@ button.plaque:focus-visible {
   margin: 0;
 }
 
-.journal-terminal {
+/* What can be done to the hunter, kept together at the leaf's edge, and wrapped under the
+   state's tag rather than crowding it when the two do not fit on one line. */
+.journal-acts {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+}
+
+.journal-act {
   padding: 0.1em 0.7em 0.2em;
   color: var(--ink);
   font: inherit;
@@ -774,15 +783,15 @@ button.plaque:focus-visible {
   cursor: pointer;
 }
 
-.journal-terminal:hover:not(:disabled),
-.journal-terminal:focus-visible {
+.journal-act:hover:not(:disabled),
+.journal-act:focus-visible {
   color: var(--bone);
   background: var(--rust);
   border-color: var(--rust);
   outline: none;
 }
 
-.journal-terminal:disabled {
+.journal-act:disabled {
   cursor: default;
   opacity: 0.5;
 }
