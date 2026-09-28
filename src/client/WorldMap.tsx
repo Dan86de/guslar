@@ -17,6 +17,7 @@ import { featheredMap, FogLayer } from "./fog.js"
 import { fitMap, hunterGround, labelAnchor, MAP_SIZE, regionGround, villageSpots, type View } from "./geometry.js"
 import { HUNTER_STATE_NAMES } from "./hunterStates.js"
 import { HunterLayer, isOut, POSES, RIDE_MS, type HunterPlace, type Pose } from "./hunters.js"
+import { WeatherLayer } from "./weather.js"
 
 /** What the map needs from the Pixi scene once it is built. */
 type Scene = {
@@ -174,10 +175,17 @@ export function WorldMap({
       const villages = new Container()
       board.addChild(villages)
 
-      const fog = new FogLayer(fogImage)
-      const fogSprite = new Sprite(Texture.from(fog.canvas))
+      const fog = new FogLayer()
+      const fogTexture = Texture.from(fog.canvas)
+      const fogSprite = new Sprite(fogTexture)
       fogSprite.visible = false
       board.addChild(fogSprite)
+
+      // The cloud art drifts over the fog's body, masked by the very same texture, so
+      // the weather is only ever seen inside the outline the composite already has.
+      const weather = new WeatherLayer(fogImage, fogTexture, app.ticker)
+      weather.container.visible = false
+      board.addChild(weather.container)
 
       // Hunters stand over the fog: they only ride in claimed regions, and one hunting at the
       // edge of its region must not fade into a neighbour's fog rim.
@@ -204,6 +212,7 @@ export function WorldMap({
           fog.compose(world)
           fogSprite.texture.source.update()
           fogSprite.visible = true
+          weather.container.visible = true
 
           for (const child of villages.removeChildren()) child.destroy()
           for (const slot of world.slots) {

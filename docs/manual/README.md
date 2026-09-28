@@ -4,7 +4,7 @@ What Guslar does, feature by feature, and what you should see at each step.
 A person reads it as the product's checklist; the verify skill (`.agents/skills/verify/`) reads it as the recipe for a check.
 
 Guslar is a local web app started with `guslar` (`npx guslar` once published).
-It draws the repos listed in a `world.json` as regions of one painted map, and covers every empty slot in fog.
+It draws the repos listed in a `world.json` as regions of one painted map, and covers every empty slot in fog, which drifts like weather while its outline stays where it is.
 Every spec in a region's repo is a village, and each village's notice board carries that spec's contracts and their states.
 Each village is painted at its stage: bounty drafted, contracts posted or cleared.
 A ready contract can be taken, which sends a hunter: a `claude` session running `/implement-slice` on it, one per village at a time.
@@ -51,6 +51,7 @@ No implementation details: only user paths, handles, commands, state and what pr
 ## Features
 
 - [Open the world](./open-the-world.md): `guslar` starts the server, opens the browser, and the map shows each region in its slot and fog elsewhere.
+- [The weather](./weather.md): the fog drifts like cloud while its outline stays put, so the map is alive when you watch it and still when you glance past it.
 - [Configure the world](./configure-the-world.md): which `world.json` Guslar reads, how regions are named, and the configs it refuses.
 - [Read a village's notice board](./villages.md): every spec is a village on the map, and its board shows each contract's title, autonomy and state from the `slices/<slug>` trailers.
 - [See each village's stage](./village-stages.md): each village is painted as a bounty drafted, contracts posted or cleared, and the page says which.
