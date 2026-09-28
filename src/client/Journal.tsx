@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type SyntheticEvent } from "react"
+import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type SyntheticEvent } from "react"
 import type { Hunter, JournalEntry, ReplyRequest } from "../shared/world.js"
 import { HUNTER_STATE_NAMES } from "./hunterStates.js"
 
@@ -85,7 +85,10 @@ export function Journal({
   const [problem, setProblem] = useState<string>()
   const atEnd = useRef(true)
 
-  useEffect(() => {
+  // A layout effect, not a passive one: React runs every layout effect before any passive effect,
+  // so showing the dialog here is what lets the effect below measure it. Shown passively, it is
+  // still display:none when that effect runs, and the journal opens at its first entry.
+  useLayoutEffect(() => {
     const element = dialog.current
     if (element && !element.open) element.show()
   }, [])

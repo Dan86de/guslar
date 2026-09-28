@@ -29,6 +29,7 @@ The steps, in this order:
 - **The reply in the broadcast.** Run `verify world`. `Wojmir`'s `"journal"` has eleven entries; the seventh is `"kind": "you"` with `"text": "Oak, from the old grove."`, and the last is `"kind": "result"` with `"text": "The plank road is laid in oak."`.
 - **Enter sends.** Run `verify fill "Reply to Wojmir" "Pine next time."`, then `verify press Enter`. `verify snapshot` shows a last item `You: Pine next time.` in `Entries`, and the box empty again.
 - **Close the journal.** Run `verify click "Close the journal"`, then `verify snapshot`: no dialog `Journal of Wojmir`, and the list `Hunters` still has `Wojmir`. Run `verify click "Wojmir"` and `verify snapshot`: the dialog `Journal of Wojmir` is open again. Run `verify press Escape` and `verify snapshot`: it is gone.
+- **It opens at its last entry.** Run `verify screenshot journal-short --size 1440x420`, which makes the window too short for the conversation, then `verify click "Wojmir"`, `verify pause 500` and `verify screenshot journal-end`, and open it. The journal opens scrolled to the foot, not the head: the last of the twelve items in `Entries`, `You: Pine next time.`, stands just above the reply box, the first one is out of sight above, and the scrollbar's thumb sits at the bottom of its track. Run `verify press Escape`, then `verify screenshot journal-tall --size 1440x900` to put the window back.
 
 ## Behind it
 
@@ -42,3 +43,4 @@ The steps, in this order:
 - A reply goes to the session at once, whatever the hunter is doing. Its answer moves the hunter as [Follow a hunter](./follow-a-hunter.md) says, so a returned-wounded hunter written to hunts again until that turn ends.
 - The journal lives as long as the hunter's claude does, and closes when the hunter leaves the map.
 - `Send` is disabled while the reply box holds no words, and a reply of only spaces is refused.
+- The journal opens at its last entry, however far the conversation has got. Scrolling back to read holds your place: entries arriving while you are turned back do not pull you down to the foot again, and reaching the foot yourself starts it following along once more.
