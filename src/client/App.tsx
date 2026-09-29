@@ -6,6 +6,7 @@ import { RegionRites } from "./RegionRites.js"
 import { useWorld } from "./useWorld.js"
 import { WorldMap, type VillageRef } from "./WorldMap.js"
 import { boundOf } from "./bound.js"
+import { useWords } from "./words/index.js"
 import type { RegionSlot } from "../shared/world.js"
 
 // The terminal brings a whole terminal emulator, so it loads only once one is opened.
@@ -13,6 +14,7 @@ const TerminalView = lazy(() => import("./TerminalView.js").then((module) => ({ 
 
 export function App() {
   const { world, connected } = useWorld()
+  const words = useWords()
   const [opened, setOpened] = useState<VillageRef>()
   const [reading, setReading] = useState<string>()
   const [watching, setWatching] = useState<string>()
@@ -33,7 +35,7 @@ export function App() {
 
   return (
     <main>
-      <h1 className="visually-hidden">Guslar</h1>
+      <h1 className="visually-hidden">{words.app.heading}</h1>
       <WorldMap world={world} onOpenVillage={setOpened} onOpenHunter={setReading} onOpenRegion={setPerforming} />
       {world && <Prompts world={world} />}
       {opened && village && (
@@ -59,7 +61,7 @@ export function App() {
         <Journal
           key={hunter.id}
           hunter={hunter}
-          bound={boundOf(world, hunter)}
+          bound={boundOf(words, world, hunter)}
           onOpenTerminal={() => setWatching(hunter.id)}
           onClose={() => setReading(undefined)}
         />
@@ -76,7 +78,7 @@ export function App() {
       )}
       {world && !connected && (
         <p className="notice" role="status">
-          The road to the server is cut. Reconnecting…
+          {words.app.reconnecting}
         </p>
       )}
     </main>

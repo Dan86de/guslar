@@ -15,10 +15,10 @@ import { outFor } from "./bound.js"
 import { cutOutAll } from "./cutout.js"
 import { featheredMap, FogLayer } from "./fog.js"
 import { fitMap, hunterGround, labelAnchor, MAP_SIZE, regionGround, villageSpots, type View } from "./geometry.js"
-import { HUNTER_STATE_NAMES } from "./hunterStates.js"
 import { HunterLayer, isOut, POSES, RIDE_MS, type HunterPlace, type Pose } from "./hunters.js"
 import { REVEAL_MS, REVEAL_STEP_MS, revealProgress } from "./reveal.js"
 import { WeatherLayer } from "./weather.js"
+import { useWords } from "./words/index.js"
 
 /** What the map needs from the Pixi scene once it is built. */
 type Scene = {
@@ -32,13 +32,6 @@ const STAGE_ART: Record<VillageStage, string> = {
   "bounty-drafted": bountyUrl,
   "contracts-posted": contractsUrl,
   cleared: clearedUrl,
-}
-
-/** A village's stage as its list item says it. */
-const STAGE_NAMES: Record<VillageStage, string> = {
-  "bounty-drafted": "Bounty drafted",
-  "contracts-posted": "Contracts posted",
-  cleared: "Cleared",
 }
 
 const STAGES = Object.keys(STAGE_ART) as VillageStage[]
@@ -93,10 +86,6 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   })
 }
 
-function slotName(slot: RegionSlot): string {
-  return slot.replace("-", " ")
-}
-
 export function WorldMap({
   world,
   onOpenVillage,
@@ -110,6 +99,7 @@ export function WorldMap({
   /** Opens a region's rites, by its slot. */
   onOpenRegion: (slot: RegionSlot) => void
 }) {
+  const words = useWords()
   const host = useRef<HTMLDivElement>(null)
   const [scene, setScene] = useState<Scene>()
   const [view, setView] = useState<View>()
@@ -313,25 +303,25 @@ export function WorldMap({
     <div className="map" ref={host} aria-busy={!ready}>
       {ready && view && world && scene && (
         <>
-          <ul className="slots" aria-label="Regions">
+          <ul className="slots" aria-label={words.map.regions}>
             {world.slots.map((slot) => {
               // A region's plaque is painted by its button under Region rites, after the villages
               // and hunters, so Tab reaches a village first; this says it in its slot's place.
               return slot.kind === "region" ? (
                 <li key={slot.slot} className="visually-hidden" data-slot={slot.slot} data-repo={slot.repo}>
                   {slot.name}
-                  <span className="visually-hidden">{`, ${slotName(slot.slot)}`}</span>
+                  <span className="visually-hidden">{`, ${words.map.slots[slot.slot]}`}</span>
                 </li>
               ) : (
                 <li key={slot.slot} className="visually-hidden" data-slot={slot.slot} data-fog="">
-                  {`Unclaimed ${slotName(slot.slot)}, under fog`}
+                  {words.map.unclaimed(words.map.slots[slot.slot])}
                 </li>
               )
             })}
           </ul>
           <VillageList world={world} view={view} aspect={scene.villageAspect} onOpen={onOpenVillage} />
           <HunterList world={world} view={view} aspect={scene.villageAspect} onOpen={onOpenHunter} />
-          <ul className="slots" aria-label="Region rites">
+          <ul className="slots" aria-label={words.map.regionRites}>
             {world.slots.map((slot) => {
               if (slot.kind !== "region") return null
               const anchor = labelAnchor(slot.slot)
@@ -342,7 +332,7 @@ export function WorldMap({
                     type="button"
                     className="plaque"
                     style={style}
-                    aria-label={`Rites of ${slot.name}`}
+                    aria-label={words.rites.ofRegion(slot.name)}
                     onClick={() => onOpenRegion(slot.slot)}
                   >
                     {slot.name}
@@ -372,6 +362,7 @@ function VillageList({
   aspect: number
   onOpen: (village: VillageRef) => void
 }) {
+  const words = useWords()
   const items = world.slots.flatMap((slot) => {
     if (slot.kind !== "region") return []
     const spots = villageSpots(slot.slot, slot.villages.length, aspect)
@@ -389,16 +380,16 @@ function VillageList({
         <li key={`${slot.slot}/${village.slug}`} className="village" style={style}>
           <button type="button" onClick={() => onOpen({ slot: slot.slot, slug: village.slug })}>
             <span className="village-name">{village.title}</span>
-            <span className="visually-hidden">{`, village in ${slot.name}`}</span>
+            <span className="visually-hidden">{words.map.villageIn(slot.name)}</span>
           </button>
-          <span className="visually-hidden">{STAGE_NAMES[village.stage]}</span>
+          <span className="visually-hidden">{words.map.stages[village.stage]}</span>
         </li>,
       ]
     })
   })
   if (items.length === 0) return null
   return (
-    <ul className="slots" aria-label="Villages">
+    <ul className="slots" aria-label={words.map.villages}>
       {items}
     </ul>
   )
@@ -420,10 +411,11 @@ function HunterList({
   aspect: number
   onOpen: (id: string) => void
 }) {
+  const words = useWords()
   const places = hunterPlaces(world, aspect)
   if (places.length === 0) return null
   return (
-    <ul className="slots" aria-label="Hunters">
+    <ul className="slots" aria-label={words.map.hunters}>
       {places.map(({ hunter, at, height }) => {
         const style = {
           left: view.x + at.x * view.scale,
@@ -443,7 +435,7 @@ function HunterList({
               <span className="hunter-name">{hunter.name}</span>
             </button>
             <span id={`hunter-${hunter.id}`} className="visually-hidden">
-              {` , ${HUNTER_STATE_NAMES[hunter.state]}${outFor(world, hunter)}`}
+              {` , ${words.hunter.states[hunter.state]}${outFor(words, world, hunter)}`}
             </span>
           </li>
         )

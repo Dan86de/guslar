@@ -1,9 +1,10 @@
 import { boundOf } from "./bound.js"
 import { useId, useState, type SyntheticEvent } from "react"
 import type { Hunter, PermissionAnswer, PermissionPrompt, WorldState } from "../shared/world.js"
+import { useWords, type Words } from "./words/index.js"
 
 /** Sends your answer to the server, and returns why it was refused, or nothing when the hunter's hook got it. */
-async function sendAnswer(hunter: Hunter, prompt: PermissionPrompt, answer: PermissionAnswer): Promise<string | undefined> {
+async function sendAnswer(words: Words, hunter: Hunter, prompt: PermissionPrompt, answer: PermissionAnswer): Promise<string | undefined> {
   try {
     const res = await fetch(`/api/hunters/${hunter.id}/prompts/${prompt.id}`, {
       method: "POST",
@@ -12,9 +13,9 @@ async function sendAnswer(hunter: Hunter, prompt: PermissionPrompt, answer: Perm
     })
     if (res.ok) return undefined
     const body = (await res.json().catch(() => ({}))) as { error?: string }
-    return body.error ?? `The server answered ${res.status}.`
+    return body.error ?? words.server.answered(res.status)
   } catch {
-    return "The road to the server is cut. Try again once it is back."
+    return words.server.unreachable
   }
 }
 
@@ -28,6 +29,7 @@ function shown(value: unknown): string {
  * A denial may carry words for the hunter, which its session reads.
  */
 function Petition({ hunter, prompt, bound }: { hunter: Hunter; prompt: PermissionPrompt; bound: string }) {
+  const words = useWords()
   const heading = useId()
   const [reason, setReason] = useState("")
   const [sending, setSending] = useState(false)
@@ -43,6 +45,7 @@ function Petition({ hunter, prompt, bound }: { hunter: Hunter; prompt: Permissio
     setProblem(undefined)
     const message = reason.trim()
     const refused = await sendAnswer(
+      words,
       hunter,
       prompt,
       behavior === "allow" ? { behavior } : message === "" ? { behavior } : { behavior, message },
@@ -57,7 +60,7 @@ function Petition({ hunter, prompt, bound }: { hunter: Hunter; prompt: Permissio
       <span className="petition-flare" aria-hidden="true" />
       <h2 id={heading} className="petition-heading">
         {hunter.name}
-        <span className="petition-asks"> asks to use </span>
+        <span className="petition-asks">{words.petition.asks}</span>
         <span className="petition-tool">{prompt.tool}</span>
       </h2>
       <p className="petition-bound">{bound}</p>
@@ -80,22 +83,22 @@ function Petition({ hunter, prompt, bound }: { hunter: Hunter; prompt: Permissio
         <input
           className="petition-reason"
           type="text"
-          aria-label={`Reason to give ${hunter.name}`}
-          placeholder="A reason, if you deny it"
+          aria-label={words.petition.reason(hunter.name)}
+          placeholder={words.petition.reasonHint}
           value={reason}
           onChange={(event) => setReason(event.target.value)}
         />
         <button
           type="button"
           className="petition-allow"
-          aria-label={`Allow ${hunter.name}`}
+          aria-label={words.petition.allowHunter(hunter.name)}
           disabled={sending}
           onClick={(event) => void answer(event, "allow")}
         >
-          Allow
+          {words.petition.allow}
         </button>
-        <button type="submit" className="petition-deny" aria-label={`Deny ${hunter.name}`} disabled={sending}>
-          Deny
+        <button type="submit" className="petition-deny" aria-label={words.petition.denyHunter(hunter.name)} disabled={sending}>
+          {words.petition.deny}
         </button>
         {problem && (
           <p className="petition-problem" role="alert">
@@ -109,12 +112,13 @@ function Petition({ hunter, prompt, bound }: { hunter: Hunter; prompt: Permissio
 
 /** Every permission a hunter waits on you for, one petition each, down the map's left edge. */
 export function Prompts({ world }: { world: WorldState }) {
+  const words = useWords()
   const asking = world.hunters.filter((hunter) => hunter.prompt)
   if (asking.length === 0) return null
   return (
-    <div className="petitions" aria-label="Requests" role="region">
+    <div className="petitions" aria-label={words.petition.requests} role="region">
       {asking.map((hunter) => {
-        const { what, where } = boundOf(world, hunter)
+        const { what, where } = boundOf(words, world, hunter)
         const bound = `${what}, ${where}`
         return hunter.prompt && <Petition key={hunter.prompt.id} hunter={hunter} prompt={hunter.prompt} bound={bound} />
       })}

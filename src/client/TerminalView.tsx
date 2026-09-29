@@ -3,9 +3,10 @@ import { Terminal } from "@xterm/xterm"
 import "@xterm/xterm/css/xterm.css"
 import { useEffect, useId, useRef, useState } from "react"
 import type { Hunter, TerminalInput, TerminalOutput } from "../shared/world.js"
+import { useWords, type Words } from "./words/index.js"
 
 /** Asks the server to resume a hunter's session in a terminal, and returns why it would not, or nothing once it is open. */
-async function openTerminal(hunter: Hunter): Promise<string | undefined> {
+async function openTerminal(words: Words, hunter: Hunter): Promise<string | undefined> {
   try {
     const res = await fetch(`/api/hunters/${hunter.id}/terminal`, {
       method: "POST",
@@ -14,9 +15,9 @@ async function openTerminal(hunter: Hunter): Promise<string | undefined> {
     })
     if (res.ok) return undefined
     const body = (await res.json().catch(() => ({}))) as { error?: string }
-    return body.error ?? `The server answered ${res.status}.`
+    return body.error ?? words.server.answered(res.status)
   } catch {
-    return "The road to the server is cut. Try again once it is back."
+    return words.server.unreachable
   }
 }
 
@@ -43,6 +44,7 @@ export function TerminalView({
   besideJournal: boolean
   onClose: () => void
 }) {
+  const words = useWords()
   const dialog = useRef<HTMLDialogElement>(null)
   const screen = useRef<HTMLDivElement>(null)
   const heading = useId()
@@ -88,7 +90,7 @@ export function TerminalView({
     resized.observe(host)
     terminal.onData((data) => sendInput({ type: "input", data }))
 
-    void openTerminal(hunter).then((refused) => {
+    void openTerminal(words, hunter).then((refused) => {
       if (stopped) return
       if (refused) {
         setProblem(refused)
@@ -106,7 +108,7 @@ export function TerminalView({
         else setEnded(message.exitCode)
       }
       socket.onclose = (event) => {
-        if (!stopped && !event.wasClean) setProblem("The road to the terminal is cut.")
+        if (!stopped && !event.wasClean) setProblem(words.terminal.cut)
       }
     })
 
@@ -134,15 +136,15 @@ export function TerminalView({
     >
       <header className="hunter-terminal-head">
         <h2 id={heading} className="hunter-terminal-heading">
-          <span className="hunter-terminal-of">Terminal of </span>
+          <span className="hunter-terminal-of">{words.terminal.of}</span>
           {hunter.name}
         </h2>
         <code className="hunter-terminal-command">claude --resume {hunter.sessionId}</code>
         {exitCode === undefined ? (
-          <p className="hunter-terminal-state">running</p>
+          <p className="hunter-terminal-state">{words.terminal.running}</p>
         ) : (
           <p className="hunter-terminal-state" data-ended="">
-            ended, exit {exitCode}
+            {words.terminal.ended(exitCode)}
           </p>
         )}
         {exitCode !== undefined && (
@@ -155,11 +157,11 @@ export function TerminalView({
               setOpening((n) => n + 1)
             }}
           >
-            Resume again
+            {words.terminal.again}
           </button>
         )}
-        <button type="button" className="hunter-terminal-close" aria-label="Close the terminal" onClick={() => dialog.current?.close()}>
-          Close
+        <button type="button" className="hunter-terminal-close" aria-label={words.terminal.close} onClick={() => dialog.current?.close()}>
+          {words.close}
         </button>
       </header>
       {problem && (

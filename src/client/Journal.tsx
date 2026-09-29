@@ -1,9 +1,9 @@
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type SyntheticEvent } from "react"
 import { isReturned, type Hunter, type JournalEntry, type ReplyRequest } from "../shared/world.js"
-import { HUNTER_STATE_NAMES } from "./hunterStates.js"
+import { useWords, type Words } from "./words/index.js"
 
 /** Sends a reply to the server, and returns why it was refused, or nothing when the hunter got it. */
-async function sendReply(hunter: Hunter, text: string): Promise<string | undefined> {
+async function sendReply(words: Words, hunter: Hunter, text: string): Promise<string | undefined> {
   const request: ReplyRequest = { text }
   try {
     const res = await fetch(`/api/hunters/${hunter.id}/replies`, {
@@ -13,9 +13,9 @@ async function sendReply(hunter: Hunter, text: string): Promise<string | undefin
     })
     if (res.ok) return undefined
     const body = (await res.json().catch(() => ({}))) as { error?: string }
-    return body.error ?? `The server answered ${res.status}.`
+    return body.error ?? words.server.answered(res.status)
   } catch {
-    return "The road to the server is cut. Try again once it is back."
+    return words.server.unreachable
   }
 }
 
@@ -35,12 +35,13 @@ function sendHome(hunter: Hunter): void {
 }
 
 function Entry({ entry, hunter }: { entry: JournalEntry; hunter: Hunter }) {
+  const words = useWords()
   switch (entry.kind) {
     case "you":
       return (
         <li className="entry" data-kind="you">
           <span className="entry-who">
-            You
+            {words.journal.you}
             <span className="entry-colon">:</span>
           </span>
           <span className="entry-text">{entry.text}</span>
@@ -69,7 +70,7 @@ function Entry({ entry, hunter }: { entry: JournalEntry; hunter: Hunter }) {
     case "result":
       return (
         <li className="entry" data-kind="result" data-error={entry.error ? "" : undefined}>
-          {entry.error ? `The turn ends in failure${entry.text ? `: ${entry.text}` : "."}` : "The turn ends."}
+          {entry.error ? words.journal.turnFails(entry.text) : words.journal.turnEnds}
         </li>
       )
   }
@@ -92,6 +93,7 @@ export function Journal({
   onOpenTerminal: () => void
   onClose: () => void
 }) {
+  const words = useWords()
   const dialog = useRef<HTMLDialogElement>(null)
   const entries = useRef<HTMLOListElement>(null)
   const heading = useId()
@@ -104,7 +106,7 @@ export function Journal({
   // Only a hunter that has come back goes home: one still out may hold a permission request, and
   // letting go of an unanswered request is read by its hook as Guslar being gone, which allows it.
   const back = isReturned(hunter)
-  const stillOut = `${hunter.name} is still out: it can only be sent home once it is back.`
+  const stillOut = words.journal.stillOut(hunter.name)
 
   // A layout effect, not a passive one: React runs every layout effect before any passive effect,
   // so showing the dialog here is what lets the effect below measure it. Shown passively, it is
@@ -126,7 +128,7 @@ export function Journal({
     if (text === "" || sending) return
     setSending(true)
     setProblem(undefined)
-    const refused = await sendReply(hunter, text)
+    const refused = await sendReply(words, hunter, text)
     setSending(false)
     if (refused) {
       setProblem(refused)
@@ -156,24 +158,24 @@ export function Journal({
     >
       <header className="journal-head">
         <h2 id={heading} className="journal-heading">
-          <span className="journal-of">Journal of </span>
+          <span className="journal-of">{words.journal.of}</span>
           {hunter.name}
         </h2>
         <p className="journal-bound">
           {bound.what}, <span className="journal-village">{bound.where}</span>
         </p>
         <div className="journal-status">
-          <p className="journal-state">{HUNTER_STATE_NAMES[hunter.state]}</p>
+          <p className="journal-state">{words.hunter.states[hunter.state]}</p>
           <div className="journal-acts">
             {!hunter.outside && (
               <button
                 type="button"
                 className="journal-act"
                 disabled={!hunter.sessionId}
-                title={hunter.sessionId ? undefined : `${hunter.name}'s session has not begun yet.`}
+                title={hunter.sessionId ? undefined : words.journal.notBegun(hunter.name)}
                 onClick={onOpenTerminal}
               >
-                Open in terminal
+                {words.journal.openTerminal}
               </button>
             )}
             <button
@@ -191,7 +193,7 @@ export function Journal({
                 sendHome(hunter)
               }}
             >
-              Send home
+              {words.journal.sendHome}
             </button>
             {!back && (
               <p id={refusal} className="visually-hidden">
@@ -200,14 +202,14 @@ export function Journal({
             )}
           </div>
         </div>
-        <button type="button" className="journal-close" aria-label="Close the journal" onClick={() => dialog.current?.close()}>
-          Close
+        <button type="button" className="journal-close" aria-label={words.journal.close} onClick={() => dialog.current?.close()}>
+          {words.close}
         </button>
       </header>
       <ol
         ref={entries}
         className="journal-entries"
-        aria-label="Entries"
+        aria-label={words.journal.entries}
         aria-live="polite"
         onScroll={(event) => {
           const list = event.currentTarget
@@ -219,7 +221,7 @@ export function Journal({
         ))}
       </ol>
       {hunter.outside ? (
-        <p className="journal-outside">Started outside Guslar: write to {hunter.name} in its own terminal.</p>
+        <p className="journal-outside">{words.journal.outside(hunter.name)}</p>
       ) : (
         <form className="journal-reply" onSubmit={(event) => void send(event)}>
           {problem && (
@@ -229,8 +231,8 @@ export function Journal({
           )}
           <textarea
             className="journal-draft"
-            aria-label={`Reply to ${hunter.name}`}
-            placeholder={`Write to ${hunter.name}…`}
+            aria-label={words.journal.reply(hunter.name)}
+            placeholder={words.journal.draft(hunter.name)}
             rows={2}
             value={draft}
             autoFocus
@@ -238,7 +240,7 @@ export function Journal({
             onKeyDown={onKeyDown}
           />
           <button type="submit" className="journal-send" disabled={sending || draft.trim() === ""}>
-            Send
+            {words.journal.send}
           </button>
         </form>
       )}

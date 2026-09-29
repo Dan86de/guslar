@@ -1,13 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react"
-import type { PermissionMode, TakeRequest } from "../shared/world.js"
-
-/** How far a hunter may go without asking you, as the chooser offers it. */
-const MODES: { mode: PermissionMode; label: string; detail: string }[] = [
-  { mode: "default", label: "Ask before every tool", detail: "It stops for you at each step." },
-  { mode: "acceptEdits", label: "Edit files freely", detail: "It asks before anything else." },
-  { mode: "auto", label: "Let Claude judge", detail: "It asks only when a step looks risky." },
-  { mode: "bypassPermissions", label: "Never ask", detail: "It rides alone and asks nothing." },
-]
+import { PERMISSION_MODES, type PermissionMode, type TakeRequest } from "../shared/world.js"
+import { useWords, type Words } from "./words/index.js"
 
 /**
  * Asks how far the hunter may go without you, then sends it. Closing it sends nobody.
@@ -30,6 +23,7 @@ export function Chooser({
   onChoose: (mode: PermissionMode, message: string) => Promise<string | undefined>
   onClose: () => void
 }) {
+  const words = useWords()
   const dialog = useRef<HTMLDialogElement>(null)
   const headingId = useId()
   const messageId = useId()
@@ -85,13 +79,13 @@ export function Chooser({
           <p className="chooser-said-hint">{message.hint}</p>
         </>
       )}
-      <p className="chooser-ask">How far may the hunter go without asking you?</p>
-      <ul className="chooser-modes" aria-label="Permission modes">
-        {MODES.map(({ mode, label, detail }) => (
+      <p className="chooser-ask">{words.chooser.ask}</p>
+      <ul className="chooser-modes" aria-label={words.chooser.modesList}>
+        {PERMISSION_MODES.map((mode) => (
           <li key={mode}>
             <button type="button" className="chooser-mode" disabled={sending} onClick={() => void choose(mode)}>
-              <span className="chooser-label">{label}</span>
-              <span className="chooser-detail">{detail}</span>
+              <span className="chooser-label">{words.chooser.modes[mode].label}</span>
+              <span className="chooser-detail">{words.chooser.modes[mode].detail}</span>
               <span className="chooser-flag">{mode}</span>
             </button>
           </li>
@@ -103,14 +97,14 @@ export function Chooser({
         </p>
       )}
       <button type="button" className="chooser-cancel" onClick={() => dialog.current?.close()}>
-        Cancel
+        {words.chooser.cancel}
       </button>
     </dialog>
   )
 }
 
 /** Sends a take to the server, and returns why it was refused, or nothing when a hunter rode out. */
-export async function sendTake(request: TakeRequest): Promise<string | undefined> {
+export async function sendTake(words: Words, request: TakeRequest): Promise<string | undefined> {
   try {
     const res = await fetch("/api/hunters", {
       method: "POST",
@@ -119,8 +113,8 @@ export async function sendTake(request: TakeRequest): Promise<string | undefined
     })
     if (res.ok) return undefined
     const body = (await res.json().catch(() => ({}))) as { error?: string }
-    return body.error ?? `The server answered ${res.status}.`
+    return body.error ?? words.server.answered(res.status)
   } catch {
-    return "The road to the server is cut. Try again once it is back."
+    return words.server.unreachable
   }
 }
