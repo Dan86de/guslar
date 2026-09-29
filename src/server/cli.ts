@@ -110,6 +110,7 @@ async function main(): Promise<void> {
       hunter.village === undefined || hunter.contract === undefined
         ? Promise.resolve(undefined)
         : reader.contract(hunter.slot, hunter.village, hunter.contract),
+    world.theme,
     path.join(path.dirname(path.resolve(worldFile)), "hunters.json"),
   )
   hunters.restore(initial)

@@ -16,29 +16,16 @@ import type {
   PermissionAnswer,
   PermissionPrompt,
   Refusal,
+  RegionSlot,
   Rite,
   SlotState,
   TakeRequest,
   Village,
 } from "../shared/world.js"
+import type { Theme } from "../shared/theme.js"
 import { isPermissionMode, isReturned, RITE_GROUND } from "../shared/world.js"
+import { namesFor } from "./names.js"
 import { Terminal } from "./terminals.js"
-
-/** Names handed out in order, the first one no hunter out is using. Original, from Slavic naming, none from the Witcher. */
-const NAMES = [
-  "Wojmir",
-  "Bogna",
-  "Dobromir",
-  "Jaromila",
-  "Radzim",
-  "Wiesława",
-  "Sulimir",
-  "Dobrawa",
-  "Ratibor",
-  "Zlata",
-  "Mściwoj",
-  "Bolesta",
-]
 
 /** What a take came to: the hunter sent out, or why none was, with the HTTP status that says so. */
 export type TakeResult = { hunter: Hunter } | { status: number; refusal: Refusal }
@@ -379,11 +366,13 @@ export class Hunters {
   /**
    * `claude` is the program each hunter runs: `GUSLAR_CLAUDE`, or `claude` on the PATH.
    * `lookup` reads a hunter's contract from its repo, to judge how it came back.
+   * `theme` is the world's, which hunters are named in.
    * `roll` is the file Guslar's own hunters are kept in, so they are on the map again after it restarts.
    */
   constructor(
     private readonly claude: string,
     private readonly lookup: ContractLookup,
+    private readonly theme: Theme,
     private readonly roll?: string,
   ) {}
 
@@ -415,7 +404,7 @@ export class Hunters {
         hunter.state = "returned-wounded"
         hunter.journal.push({ kind: "result", text: CUT_SHORT, error: true })
       }
-      if (this.list().some((h) => h.name === hunter.name)) hunter.name = this.freeName()
+      if (this.list().some((h) => h.name === hunter.name)) hunter.name = this.freeName(hunter.slot)
       this.out.set(hunter.id, { hunter, repo: region.repo, asking: [] })
     }
     this.see(slots)
@@ -507,7 +496,7 @@ export class Hunters {
     const opening = openingOf(rite, village, contract, request.message)
     const hunter: Hunter = {
       id,
-      name: this.freeName(),
+      name: this.freeName(request.slot),
       rite,
       slot: request.slot,
       ...(village ? { village: village.slug } : {}),
@@ -705,7 +694,7 @@ export class Hunters {
       outsider = {
         hunter: {
           id: randomUUID(),
-          name: this.freeName(),
+          name: this.freeName(region.slot),
           outside: true,
           slot: region.slot,
           permissionMode: isPermissionMode(input.permission_mode) ? input.permission_mode : "default",
@@ -1073,13 +1062,15 @@ export class Hunters {
     }
   }
 
-  private freeName(): string {
+  /** The first of the slot's names in the world's theme that no hunter on the map is using. */
+  private freeName(slot: RegionSlot): string {
+    const names = namesFor(this.theme, slot)
     const taken = new Set(this.list().map((h) => h.name))
-    const free = NAMES.find((name) => !taken.has(name))
+    const free = names.find((name) => !taken.has(name))
     if (free) return free
     let n = 2
-    while (taken.has(`${NAMES[0]} ${n}`)) n++
-    return `${NAMES[0]} ${n}`
+    while (taken.has(`${names[0]} ${n}`)) n++
+    return `${names[0]} ${n}`
   }
 
   private changed(): void {

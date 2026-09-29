@@ -35,11 +35,11 @@ export function boundOf(words: Words, world: WorldState, hunter: Hunter): { what
  */
 export function outFor(words: Words, world: WorldState, hunter: Hunter): string {
   const { where } = boundOf(words, world, hunter)
-  const errand = words.hunter.errand(hunter)
   if (hunter.outside) {
-    const place = hunter.rite === undefined ? words.bound.outsideIn(where) : words.bound.hunt(errand, where)
+    const place =
+      hunter.rite === undefined ? words.bound.outsideIn(where) : words.bound.hunt(words.hunter.errand(hunter), where)
     return `${place}${words.bound.outsideSuffix}`
   }
-  if (hunter.rite === "implement-slice") return words.bound.hunt(errand, where)
-  return words.bound.sent(errand, where, hunter.village === undefined)
+  if (hunter.rite === "implement-slice") return words.bound.hunt(words.hunter.errand(hunter), where)
+  return words.bound.sent(words.hunter.errand(hunter), where, hunter.village === undefined)
 }

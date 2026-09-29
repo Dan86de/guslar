@@ -66,13 +66,13 @@ export class HunterLayer {
   private clock = 0
 
   /**
-   * `flareHeight` is how tall the flare stands as a share of its figure's height, since each
+   * `flareShare` is how tall the flare stands as a share of its figure's height, since each
    * theme's flare carries its signal at a different height on its post.
    */
   constructor(
     poseImages: HTMLImageElement[],
     flareImage: HTMLImageElement,
-    private readonly flareHeight: number,
+    private readonly flareShare: number,
     ticker: Ticker,
   ) {
     const cutouts = cutOutAll(poseImages)
@@ -134,7 +134,7 @@ export class HunterLayer {
     // Pixi's width setter keeps the sign scale.x had, so set the size, then the side it faces.
     sprite.width = height * this.aspect
     sprite.scale.x = Math.abs(sprite.scale.x) * figure.facing
-    const flareHeight = height * this.flareHeight
+    const flareHeight = height * this.flareShare
     flare.height = flareHeight
     flare.width = flareHeight * this.flareAspect
     // Planted just behind the hunter, on the side it faces away from, so its pennant flies beside the

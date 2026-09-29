@@ -2,11 +2,25 @@ import { readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, describe, expect, it } from "vitest"
+import type { Hunter, TakeRequest } from "../src/shared/world.js"
+import { bogwater } from "./fixture-region.js"
 import { failGuslar, fixtures, receiveWorld, startGuslar, tempDir, type Running } from "./guslar.js"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const worldFile = path.join(fixtures, "world", "world.json")
 const vaillantFile = path.join(fixtures, "world", "vaillant.json")
+
+/** Sends a hunter the way the map does, and returns the name it was given. */
+async function nameOfSent(guslar: Running, request: TakeRequest): Promise<string> {
+  const res = await fetch(new URL("/api/hunters", guslar.url), {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: new URL(guslar.url).origin },
+    body: JSON.stringify(request),
+  })
+  const body = (await res.json()) as { hunter?: Hunter }
+  if (res.status !== 201 || !body.hunter) throw new Error(`no hunter (${res.status}): ${JSON.stringify(body)}`)
+  return body.hunter.name
+}
 
 /** A GET of one of this Guslar's paths: its status, content type and body. */
 async function get(guslar: Running, pathname: string): Promise<{ status: number; type: string; body: Buffer }> {
@@ -95,6 +109,26 @@ describe("choosing a world's theme", () => {
     const world = await receiveWorld(guslar.url)
     const unnamed = world.slots.find((slot) => slot.slot === "river-town")
     expect(unnamed?.kind === "region" && unnamed.name).toBe("kettle")
+  })
+
+  it("names a vaillant technician from its office's city, and a guslar hunter from Guslar's names", async () => {
+    const survey = (slot: TakeRequest["slot"]): TakeRequest => ({ slot, rite: "interview", permissionMode: "default" })
+    const named: Record<string, string[]> = {}
+    for (const theme of ["vaillant", "guslar"]) {
+      const file = path.join(tempDir(), "world.json")
+      const regions = [
+        { slot: "forest", repo: bogwater().repo },
+        { slot: "river-town", repo: bogwater().repo },
+      ]
+      writeFileSync(file, JSON.stringify({ theme, regions }))
+      guslar = await startGuslar(["--no-open", "--world", file])
+      await receiveWorld(guslar.url)
+      named[theme] = [await nameOfSent(guslar, survey("river-town")), await nameOfSent(guslar, survey("forest"))]
+      await guslar.stop()
+      guslar = undefined
+    }
+    // Lyon's first name, then Remscheid's; in Guslar, the first two of its one list.
+    expect(named).toEqual({ vaillant: ["Gabriel", "Lukas"], guslar: ["Wojmir", "Bogna"] })
   })
 
   it("refuses a theme there is not, naming the file, the field and the themes there are", async () => {

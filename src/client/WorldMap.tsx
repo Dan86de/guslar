@@ -1,7 +1,8 @@
 import { Application, BlurFilter, CanvasSource, ColorMatrixFilter, Container, Sprite, Texture } from "pixi.js"
 import { useEffect, useRef, useState } from "react"
 import type { RegionSlot, VillageStage, WorldState } from "../shared/world.js"
-import { pageTheme, THEME_ART } from "./art.js"
+import { THEME_ART } from "./art.js"
+import type { Theme } from "../shared/theme.js"
 import { outFor } from "./bound.js"
 import { cutOutAll } from "./cutout.js"
 import { featheredMap, FogLayer } from "./fog.js"
@@ -65,11 +66,14 @@ function loadImage(url: string): Promise<HTMLImageElement> {
 }
 
 export function WorldMap({
+  theme,
   world,
   onOpenVillage,
   onOpenHunter,
   onOpenRegion,
 }: {
+  /** The theme the map is painted in, for as long as it is mounted. */
+  theme: Theme
   world: WorldState | undefined
   onOpenVillage: (village: VillageRef) => void
   /** Opens a hunter's journal, by the hunter's id. */
@@ -91,7 +95,7 @@ export function WorldMap({
     let onVisibility: (() => void) | undefined
     let stopStillness: (() => void) | undefined
 
-    const art = THEME_ART[pageTheme()]
+    const art = THEME_ART[theme]
 
     void (async () => {
       const [, mapImage, fogImage, flareImage, ...images] = await Promise.all([
@@ -270,7 +274,7 @@ export function WorldMap({
       }
       setScene(undefined)
     }
-  }, [])
+  }, [theme])
 
   useEffect(() => {
     if (!scene || !world) return
