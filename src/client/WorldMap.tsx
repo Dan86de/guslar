@@ -314,7 +314,7 @@ export function WorldMap({
                 </li>
               ) : (
                 <li key={slot.slot} className="visually-hidden" data-slot={slot.slot} data-fog="">
-                  {words.map.unclaimed(words.map.slots[slot.slot])}
+                  {words.map.unclaimed(slot.slot)}
                 </li>
               )
             })}

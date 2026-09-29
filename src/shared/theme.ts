@@ -1,3 +1,5 @@
+import type { RegionSlot } from "./world.js"
+
 /**
  * How a world is drawn. `guslar` is the painted Slavic world, and `vaillant` a heat-pump world in
  * deep winter. The mechanics are the same in every theme; only the skin changes.
@@ -21,3 +23,23 @@ export const THEME_TABS: Record<Theme, { title: string; icon: { href: string; ty
   guslar: { title: "Guslar", icon: { href: "/favicon.svg", type: "image/svg+xml" } },
   vaillant: { title: "Guslar · Vaillant", icon: { href: "/vaillant/favicon.png", type: "image/png" } },
 }
+
+/**
+ * The office each slot stands for in a Vaillant world, matched by landscape: the HQ in the wooded
+ * Bergisches Land, Silesian pit-heads, two rivers meeting at an old town, the Alps, the polders
+ * and classical ruins.
+ */
+export const OFFICES: Record<RegionSlot, string> = {
+  forest: "Remscheid",
+  marsh: "Amsterdam",
+  mountains: "Dietikon",
+  "river-town": "Lyon",
+  mines: "Katowice",
+  ruins: "Istanbul",
+}
+
+/**
+ * What a region is called when its world.json entry gives no `name`: in a theme listed here, the
+ * place its slot stands for, and otherwise its repo's folder. A given name always wins.
+ */
+export const REGION_NAMES: Partial<Record<Theme, Record<RegionSlot, string>>> = { vaillant: OFFICES }

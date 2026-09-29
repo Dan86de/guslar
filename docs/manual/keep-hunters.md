@@ -34,7 +34,7 @@ The steps, in this order:
 ## Behind it
 
 - **`/api/world` agrees with the broadcast.** `verify http /api/world` prints `HTTP 200 application/json` and one hunter, `Wojmir`, with `"sessionId":"8c1d6f0a-51b2-4a7e-9e0d-2f4b7c9a1e33"`.
-- **The roll follows the map.** `verify read hunters.json` holds Wojmir with `"state":"hunting"` and the journal the map shows.
+- **The roll follows the map.** `verify read hunters.json` holds Wojmir with `"state":"returned-wounded"`, as the map shows him after the crash, and the journal the map shows.
 
 ## Gotchas
 

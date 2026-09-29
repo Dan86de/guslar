@@ -225,6 +225,31 @@ export type Refusal =
   | { reason: "not-waiting"; hunter: string }
   | { reason: "still-out"; hunter: string }
 
+/** Every reason code a refusal can carry, listed once so each theme can be held to wording them all. */
+const REASONS: Record<Refusal["reason"], true> = {
+  "no-region": true,
+  "no-village": true,
+  "no-contract": true,
+  busy: true,
+  "being-sent": true,
+  "not-ready": true,
+  "not-pending": true,
+  "contracts-posted": true,
+  "cannot-start": true,
+  "no-hunter": true,
+  outside: true,
+  "empty-reply": true,
+  "no-session": true,
+  "cannot-resume": true,
+  "not-listening": true,
+  "not-begun": true,
+  "cannot-open-terminal": true,
+  "not-waiting": true,
+  "still-out": true,
+}
+
+export const REFUSAL_REASONS = Object.keys(REASONS) as Refusal["reason"][]
+
 /** What the server answers a request it refused. */
 export type Refused = { refusal: Refusal }
 

@@ -47,6 +47,16 @@ function returned(hunter: Pick<Hunter, "name" | "state">): string | undefined {
   }
 }
 
+/** A slot by itself, as a region's item and a fogged one name it: `river town`. */
+const SLOTS: Record<RegionSlot, string> = {
+  forest: "forest",
+  marsh: "marsh",
+  mountains: "mountains",
+  "river-town": "river town",
+  mines: "mines",
+  ruins: "ruins",
+}
+
 /** A contract's state as a refusal says it: `S4 of Drain the bog is sealed`. */
 const CONTRACT_STATES: Record<ContractState, string> = {
   done: "done",
@@ -75,16 +85,9 @@ export const guslar = {
 
   map: {
     regions: "Regions",
-    /** A slot by itself, as a region's item and a fogged one name it: `river town`. */
-    slots: {
-      forest: "forest",
-      marsh: "marsh",
-      mountains: "mountains",
-      "river-town": "river town",
-      mines: "mines",
-      ruins: "ruins",
-    } satisfies Record<RegionSlot, string>,
-    unclaimed: (slot: string) => `Unclaimed ${slot}, under fog`,
+    slots: SLOTS,
+    /** A slot no region stands in: `Unclaimed river town, under fog`. */
+    unclaimed: (slot: RegionSlot) => `Unclaimed ${SLOTS[slot]}, under fog`,
     villages: "Villages",
     /** Said after a village's title on its button: `, village in Bogwater Reach`. */
     villageIn: (region: string) => `, village in ${region}`,

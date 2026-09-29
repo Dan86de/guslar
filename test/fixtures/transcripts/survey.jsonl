@@ -1,0 +1,5 @@
+{"type":"system","subtype":"init","cwd":"/repo","session_id":"5e0920e1-2e63-4115-9bdd-000000000010","tools":["AskUserQuestion","Bash","Edit","Read","Skill","Write"],"model":"claude-opus-5-5","permissionMode":"default","slash_commands":["interview","write-spec","write-slices","make-verify","implement-slice"]}
+{"replay":"wait","for":"survey"}
+{"type":"assistant","message":{"model":"claude-opus-5-5","id":"msg_s1","type":"message","role":"assistant","content":[{"type":"text","text":"The survey is under way."}],"stop_reason":null},"parent_tool_use_id":null,"session_id":"5e0920e1-2e63-4115-9bdd-000000000010"}
+{"replay":"wait","for":"end"}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":4200,"num_turns":1,"result":"The survey is done.","stop_reason":"end_turn","session_id":"5e0920e1-2e63-4115-9bdd-000000000010"}

@@ -79,6 +79,22 @@ describe("choosing a world's theme", () => {
     expect(api.theme).toBe("vaillant")
   })
 
+  it("names a vaillant region without a name after its office, and keeps a given name", async () => {
+    guslar = await startGuslar(["--no-open", "--world", vaillantFile])
+    const world = await receiveWorld(guslar.url)
+    expect(world.slots.flatMap((slot) => (slot.kind === "region" ? [[slot.slot, slot.name]] : []))).toEqual([
+      ["forest", "Bogwater Reach"],
+      ["river-town", "Lyon"],
+    ])
+  })
+
+  it("names a guslar region without a name after its folder", async () => {
+    guslar = await startGuslar(["--no-open", "--world", worldFile])
+    const world = await receiveWorld(guslar.url)
+    const unnamed = world.slots.find((slot) => slot.slot === "river-town")
+    expect(unnamed?.kind === "region" && unnamed.name).toBe("kettle")
+  })
+
   it("refuses a theme there is not, naming the file, the field and the themes there are", async () => {
     const file = path.join(tempDir(), "nonsense.json")
     writeFileSync(file, JSON.stringify({ theme: "nonsense", regions: [] }))

@@ -115,6 +115,7 @@ Unfit because the build is stale means your edit is not in the running product: 
 Handles to use:
 
 - On the tab: the `title:` and `icon:` lines `open` prints. A world with no `theme`, or `"theme": "guslar"`, has `title: Guslar` and `icon: /favicon.svg`; a Vaillant world, `title: Guslar · Vaillant` and `icon: /vaillant/favicon.png`.
+- In a Vaillant world, every name below is said in its own words instead, as [Choose a world's theme](../../../docs/manual/choose-a-theme.md) lists them: `Offices`, `Heat pumps`, `Technicians` and `Office jobs` for the lists, `Jobs at <office>` for a region's rites, `Job board of <heat pump>` for a notice board, `Service log of <technician>` for a journal.
 - On the page: the heading `Guslar`, the list named `Regions`, and its six items in slot order.
   A region item reads `<name> , <slot name>` and a fogged one `Unclaimed <slot name>, under fog`, where the slot name is the slot with its hyphen as a space (`river town`).
   When the server is gone there is a status `The road to the server is cut. Reconnecting…`.

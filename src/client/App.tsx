@@ -3,17 +3,27 @@ import { Journal } from "./Journal.js"
 import { NoticeBoard } from "./NoticeBoard.js"
 import { Prompts } from "./Prompts.js"
 import { RegionRites } from "./RegionRites.js"
-import { useWorld } from "./useWorld.js"
+import { useWorld, type Connection } from "./useWorld.js"
 import { WorldMap, type VillageRef } from "./WorldMap.js"
 import { boundOf } from "./bound.js"
-import { useWords } from "./words/index.js"
+import { useWords, WORDS, WordsProvider } from "./words/index.js"
+import { DEFAULT_THEME } from "../shared/theme.js"
 import type { RegionSlot } from "../shared/world.js"
 
 // The terminal brings a whole terminal emulator, so it loads only once one is opened.
 const TerminalView = lazy(() => import("./TerminalView.js").then((module) => ({ default: module.TerminalView })))
 
+/** The map, speaking its world's theme: Guslar's words until the first broadcast names another. */
 export function App() {
-  const { world, connected } = useWorld()
+  const connection = useWorld()
+  return (
+    <WordsProvider value={WORDS[connection.world?.theme ?? DEFAULT_THEME]}>
+      <Page {...connection} />
+    </WordsProvider>
+  )
+}
+
+function Page({ world, connected }: Connection) {
   const words = useWords()
   const [opened, setOpened] = useState<VillageRef>()
   const [reading, setReading] = useState<string>()
