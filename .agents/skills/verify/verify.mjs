@@ -512,10 +512,12 @@ const commands = {
     const run = runDir(flags)
     if (!name) throw new Refusal("say what to click: click <accessible name of a button>")
     return withPage(run, async (page) => {
-      const buttons = page.getByRole("button", { name, exact: false })
+      // --exact names a button whose name is only a prefix of another's, like Send beside Send home.
+      const exact = flags.exact === true
+      const buttons = page.getByRole("button", { name, exact })
       const count = await buttons.count()
       if (count !== 1) {
-        out(count === 0 ? `no button named "${name}"` : `${count} buttons match "${name}"; name one of them fully`)
+        out(count === 0 ? `no button named "${name}"` : `${count} buttons ${exact ? "are named" : "match"} "${name}"; name one of them fully`)
         for (const button of await page.getByRole("button").all()) out(`  button: ${await accessibleName(button)}`)
         return 1
       }
@@ -808,8 +810,8 @@ function parse(argv) {
     const arg = rest[i]
     if (arg === "--run" || (name === "guslar" && arg === "--env") || (!passthrough && ["--world", "--timeout", "--size", "--signal", "--clip", "--zoom", "--save"].includes(arg))) {
       flags[arg.slice(2)] = rest[++i]
-    } else if (!passthrough && arg === "--gone") {
-      flags.gone = true
+    } else if (!passthrough && (arg === "--gone" || arg === "--exact")) {
+      flags[arg.slice(2)] = true
     } else {
       positional.push(arg)
     }
