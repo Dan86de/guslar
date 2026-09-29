@@ -4,6 +4,7 @@ import "@xterm/xterm/css/xterm.css"
 import { useEffect, useId, useRef, useState } from "react"
 import type { Hunter, TerminalInput, TerminalOutput } from "../shared/world.js"
 import { whyRefused } from "./refused.js"
+import { token } from "./tokens.js"
 import { useWords, type Words } from "./words/index.js"
 
 /** Asks the server to resume a hunter's session in a terminal, and returns why it would not, or nothing once it is open. */
@@ -21,13 +22,15 @@ async function openTerminal(words: Words, hunter: Hunter): Promise<string | unde
   }
 }
 
-/** The terminal in the map's own colours: bone on night, with a rust selection. */
-const THEME = {
-  background: "#1d1812",
-  foreground: "#d9cba8",
-  cursor: "#d9cba8",
-  cursorAccent: "#1d1812",
-  selectionBackground: "rgba(138, 59, 42, 0.55)",
+/** The terminal in the map's own colours: bone on night, with a rust selection at 55% (8c). */
+function terminalTheme() {
+  return {
+    background: token("night"),
+    foreground: token("bone"),
+    cursor: token("bone"),
+    cursorAccent: token("night"),
+    selectionBackground: `${token("rust")}8c`,
+  }
 }
 
 /**
@@ -64,7 +67,7 @@ export function TerminalView({
     let stopped = false
     let socket: WebSocket | undefined
     const terminal = new Terminal({
-      theme: THEME,
+      theme: terminalTheme(),
       fontFamily: 'ui-monospace, "SF Mono", Menlo, monospace',
       fontSize: 13,
       lineHeight: 1.15,

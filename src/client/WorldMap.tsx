@@ -16,6 +16,7 @@ import { cutOutAll } from "./cutout.js"
 import { featheredMap, FogLayer } from "./fog.js"
 import { fitMap, hunterGround, labelAnchor, MAP_SIZE, regionGround, villageSpots, type View } from "./geometry.js"
 import { HunterLayer, isOut, POSES, RIDE_MS, type HunterPlace, type Pose } from "./hunters.js"
+import { token } from "./tokens.js"
 import { REVEAL_MS, REVEAL_STEP_MS, revealProgress } from "./reveal.js"
 import { WeatherLayer } from "./weather.js"
 import { useWords } from "./words/index.js"
@@ -117,7 +118,7 @@ export function WorldMap({
       const [, mapImage, fogImage, flareImage, ...images] = await Promise.all([
         app.init({
           resizeTo: element,
-          background: "#1d1812",
+          background: token("night"),
           antialias: true,
           autoDensity: true,
           resolution: window.devicePixelRatio,

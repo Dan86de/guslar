@@ -65,15 +65,20 @@ function clientDir(): string {
 
 /**
  * The built map's page, with the theme's title and icon in place of Guslar's, so a browser tab
- * shows which world it is before the map has loaded.
+ * shows which world it is before the map has loaded, and the theme on its root, so its colours are
+ * the world's from the first paint.
  */
 function pageOf(dir: string, theme: Theme): string {
   const page = readFileSync(path.join(dir, "index.html"), "utf8")
   const { title, icon } = THEME_TABS[theme]
+  const ROOT = /<html([^>]*) data-theme="[^"]*"/
   const TITLE = /<title>[^<]*<\/title>/
   const ICON = /<link rel="icon"[^>]*>/
-  if (!TITLE.test(page) || !ICON.test(page)) throw new Error("guslar: its built page has no title or icon to theme")
+  if (!ROOT.test(page) || !TITLE.test(page) || !ICON.test(page)) {
+    throw new Error("guslar: its built page has no theme, title or icon to set")
+  }
   return page
+    .replace(ROOT, `<html$1 data-theme="${theme}"`)
     .replace(TITLE, `<title>${title}</title>`)
     .replace(ICON, `<link rel="icon" type="${icon.type}" href="${icon.href}" />`)
 }

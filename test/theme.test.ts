@@ -32,6 +32,7 @@ describe("choosing a world's theme", () => {
       const page = await get(guslar, "/")
       expect(page.status).toBe(200)
       expect(page.body.equals(built)).toBe(true)
+      expect(page.body.toString()).toContain('<html lang="en" data-theme="guslar">')
       expect(page.body.toString()).toContain("<title>Guslar</title>")
       expect(page.body.toString()).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg" />')
 
@@ -54,6 +55,7 @@ describe("choosing a world's theme", () => {
       expect(page.status).toBe(200)
       expect(page.type).toContain("text/html")
       const html = page.body.toString()
+      expect(html).toContain('<html lang="en" data-theme="vaillant">')
       expect(html).toContain("<title>Guslar · Vaillant</title>")
       expect(html).toContain('<link rel="icon" type="image/png" href="/vaillant/favicon.png" />')
       expect(html).not.toContain("/favicon.svg")
