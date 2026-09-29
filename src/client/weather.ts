@@ -1,4 +1,5 @@
 import { Container, Sprite, Texture, TilingSprite, CanvasSource, type Ticker } from "pixi.js"
+import type { Rgb } from "./art.js"
 import { advanceDrift, driftOffsets } from "./drift.js"
 import { MAP_SIZE } from "./geometry.js"
 
@@ -16,9 +17,12 @@ export class WeatherLayer {
   private sinceStep = 0
   private held = false
 
-  /** `fogTexture` is the fog composite's texture, used here as the shape the drift shows through. */
-  constructor(fogArt: HTMLImageElement, fogTexture: Texture, ticker: Ticker) {
-    const tile = seamlessTile(fogArt)
+  /**
+   * `fogArt` is the theme's hatching and `ink` the colour it is laid on in. `fogTexture` is the
+   * fog composite's texture, used here as the shape the drift shows through.
+   */
+  constructor(fogArt: HTMLImageElement, ink: Rgb, fogTexture: Texture, ticker: Ticker) {
+    const tile = seamlessTile(fogArt, ink)
     this.tileSize = tile.width
     // Mipmapped: the map is drawn at about half size, and fine hatching minified
     // without them crawls as it drifts.
@@ -123,7 +127,7 @@ const TILE_SIZE = 768
  * the painting's own edges meeting in a cross down the middle, which a patch of the art
  * covers, faded in over a wide band so the hatching crosses it with no line to see.
  */
-function seamlessTile(art: HTMLImageElement): HTMLCanvasElement {
+function seamlessTile(art: HTMLImageElement, ink: Rgb): HTMLCanvasElement {
   const size = TILE_SIZE
   const half = size / 2
   const canvas = document.createElement("canvas")
@@ -135,24 +139,24 @@ function seamlessTile(art: HTMLImageElement): HTMLCanvasElement {
     for (const y of [-half, half]) ctx.drawImage(art, x, y, size, size)
   }
   ctx.drawImage(crossPatch(art, size), 0, 0)
-  inkOnly(ctx, size)
+  inkOnly(ctx, size, ink)
   return canvas
 }
 
 /**
- * Lifts the hatching off the paper it was painted on: each pixel becomes shadow as
- * deep as it was dark, and the cream ground falls away to nothing. Laid over the fog's
- * bone wash that darkens it exactly where the ink is, which is what the stamped art did
- * when it was multiplied into the wash, and leaves the wash's own colour everywhere else.
+ * Lifts the hatching off the paper it was painted on: each pixel becomes the theme's ink,
+ * as deep as it was dark, and the paper falls away to nothing. Laid over the fog's wash
+ * that darkens it exactly where the ink is, which is what the stamped art did when it was
+ * multiplied into the wash, and leaves the wash's own colour everywhere else.
  */
-function inkOnly(ctx: CanvasRenderingContext2D, size: number): void {
+function inkOnly(ctx: CanvasRenderingContext2D, size: number, [r, g, b]: Rgb): void {
   const image = ctx.getImageData(0, 0, size, size)
   const pixels = image.data
   for (let i = 0; i < pixels.length; i += 4) {
     const lightest = Math.max(pixels[i] ?? 0, pixels[i + 1] ?? 0, pixels[i + 2] ?? 0)
-    pixels[i] = 0
-    pixels[i + 1] = 0
-    pixels[i + 2] = 0
+    pixels[i] = r
+    pixels[i + 1] = g
+    pixels[i + 2] = b
     pixels[i + 3] = 255 - lightest
   }
   ctx.putImageData(image, 0, 0)

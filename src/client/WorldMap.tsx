@@ -1,7 +1,6 @@
 import { Application, BlurFilter, CanvasSource, ColorMatrixFilter, Container, Sprite, Texture } from "pixi.js"
 import { useEffect, useRef, useState } from "react"
 import flareUrl from "../../art/awaiting-flare.png"
-import fogUrl from "../../art/fog.png"
 import huntingUrl from "../../art/hunter-hunting.png"
 import ridingUrl from "../../art/hunter-riding.png"
 import trophyUrl from "../../art/hunter-trophy.png"
@@ -9,8 +8,8 @@ import woundedUrl from "../../art/hunter-wounded.png"
 import bountyUrl from "../../art/village-bounty.png"
 import clearedUrl from "../../art/village-cleared.png"
 import contractsUrl from "../../art/village-contracts.png"
-import mapUrl from "../../art/world-map.png"
 import type { RegionSlot, VillageStage, WorldState } from "../shared/world.js"
+import { pageTheme, THEME_ART } from "./art.js"
 import { outFor } from "./bound.js"
 import { cutOutAll } from "./cutout.js"
 import { featheredMap, FogLayer } from "./fog.js"
@@ -114,6 +113,8 @@ export function WorldMap({
     let onVisibility: (() => void) | undefined
     let stopStillness: (() => void) | undefined
 
+    const art = THEME_ART[pageTheme()]
+
     void (async () => {
       const [, mapImage, fogImage, flareImage, ...images] = await Promise.all([
         app.init({
@@ -123,8 +124,8 @@ export function WorldMap({
           autoDensity: true,
           resolution: window.devicePixelRatio,
         }),
-        loadImage(mapUrl),
-        loadImage(fogUrl),
+        loadImage(art.map),
+        loadImage(art.weather),
         loadImage(flareUrl),
         ...STAGES.map((stage) => loadImage(STAGE_ART[stage])),
         ...POSES.map((pose) => loadImage(POSE_ART[pose])),
@@ -169,14 +170,14 @@ export function WorldMap({
       const villages = new Container()
       board.addChild(villages)
 
-      const fog = new FogLayer()
+      const fog = new FogLayer(art.veil)
       const fogTexture = Texture.from(fog.canvas)
       const fogSprite = new Sprite(fogTexture)
       board.addChild(fogSprite)
 
       // The cloud art drifts over the fog's body, masked by the very same texture, so
       // the weather is only ever seen inside the outline the composite already has.
-      const weather = new WeatherLayer(fogImage, fogTexture, app.ticker)
+      const weather = new WeatherLayer(fogImage, art.ink, fogTexture, app.ticker)
       board.addChild(weather.container)
 
       // Hunters stand over the fog: they only ride in claimed regions, and one hunting at the

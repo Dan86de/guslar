@@ -83,7 +83,7 @@ Two runs can go side by side: nothing is shared but the built `dist/`, which eac
 ```
 
 Read-only. It prints `fit: guslar pid … at …, browser pid …, build is current` and exits 0, or `unfit` with one line per problem and exits 1.
-It checks that the recorded Guslar is alive and is this run's `dist/server/cli.js` reading this run's world, that it answers and serves no repo outside the run, that nothing in `src/`, `index.html`, `package.json`, `vite.config.ts` or the art in `art/` changed since start, and that the browser is alive.
+It checks that the recorded Guslar is alive and is this run's `dist/server/cli.js` reading this run's world, that it answers and serves no repo outside the run, that nothing in `src/`, `index.html`, `package.json`, `vite.config.ts` or the art in `art/` and `art/vaillant/` changed since start, and that the browser is alive.
 
 Run it first, and again whenever something looks off.
 Unfit because the build is stale means your edit is not in the running product: stop and start a new run.

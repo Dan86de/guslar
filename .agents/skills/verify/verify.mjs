@@ -754,7 +754,12 @@ function newerThanBuild(builtAt) {
     }
   }
   walk(path.join(ROOT, "src"))
-  const art = readdirSync(path.join(ROOT, "art")).filter((file) => file.endsWith(".png")).map((file) => `art/${file}`)
+  // The art each theme bundles: Guslar's in `art/`, every other theme's in a folder of its own.
+  const art = ["art", "art/vaillant"].flatMap((dir) =>
+    readdirSync(path.join(ROOT, dir))
+      .filter((file) => file.endsWith(".png"))
+      .map((file) => `${dir}/${file}`),
+  )
   for (const file of ["index.html", "package.json", "vite.config.ts", ...art]) {
     if (statSync(path.join(ROOT, file)).mtimeMs > builtAt) changed.push(file)
   }

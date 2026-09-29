@@ -1,4 +1,5 @@
 import type { RegionSlot, WorldState } from "../shared/world.js"
+import type { Rgb, ThemeArt } from "./art.js"
 import { clearArea, MAP_SIZE, SLOT_AREAS, type Ellipse } from "./geometry.js"
 import { REGION_SLOTS } from "../shared/world.js"
 
@@ -13,12 +14,18 @@ import { REGION_SLOTS } from "../shared/world.js"
 export class FogLayer {
   readonly canvas: HTMLCanvasElement
   private readonly clouds = new Map<RegionSlot, HTMLCanvasElement>()
+  private readonly areas: Record<RegionSlot, Ellipse>
 
-  constructor() {
+  /**
+   * `veil` is the theme's wash, bone mist in Guslar and cold frost in a Vaillant world, and where
+   * its clouds reach wider than the slots' own areas.
+   */
+  constructor(veil: ThemeArt["veil"]) {
+    this.areas = { ...SLOT_AREAS, ...veil.reach }
     this.canvas = document.createElement("canvas")
     this.canvas.width = MAP_SIZE.width
     this.canvas.height = MAP_SIZE.height
-    REGION_SLOTS.forEach((slot, index) => this.clouds.set(slot, paintFog(SLOT_AREAS[slot], index + 1)))
+    REGION_SLOTS.forEach((slot, index) => this.clouds.set(slot, paintFog(this.areas[slot], index + 1, veil)))
   }
 
   /**
@@ -44,7 +51,7 @@ export class FogLayer {
         if (reveal >= 1) continue
         ctx.globalAlpha = 1 - reveal
       }
-      const area = SLOT_AREAS[slot]
+      const area = this.areas[slot]
       ctx.drawImage(cloud, area.x - cloud.width / 2, area.y - cloud.height / 2)
       ctx.globalAlpha = 1
     }
@@ -115,7 +122,7 @@ function fadeEdges(ctx: CanvasRenderingContext2D, width: number, height: number,
  * bone wash, cut to a cloud of soft blobs so the rim is lumpy like the painted
  * mist around the map, never a clean oval.
  */
-function paintFog(area: Ellipse, seed: number): HTMLCanvasElement {
+function paintFog(area: Ellipse, seed: number, veil: ThemeArt["veil"]): HTMLCanvasElement {
   const pad = 1.3
   const width = Math.ceil(area.rx * 2 * pad)
   const height = Math.ceil(area.ry * 2 * pad)
@@ -125,16 +132,17 @@ function paintFog(area: Ellipse, seed: number): HTMLCanvasElement {
   const ctx = canvas.getContext("2d")
   if (!ctx) throw new Error("no 2d canvas")
 
-  // Bone at the heart, cooling to mist blue where it thins, and carrying the warmth the
-  // cloud art's own cream paper used to lend it when the art was stamped in here.
+  // The theme's heart colour, cooling to its rim where the cloud thins. Guslar's carries the
+  // warmth the cloud art's own cream paper used to lend it when the art was stamped in here.
   const wash = ctx.createRadialGradient(width / 2, height / 2, 0, width / 2, height / 2, Math.max(width, height) / 2)
-  wash.addColorStop(0, "rgb(212, 201, 169)")
-  wash.addColorStop(1, "rgb(169, 169, 156)")
+  wash.addColorStop(0, css(veil.heart))
+  wash.addColorStop(1, css(veil.rim))
   ctx.fillStyle = wash
   ctx.fillRect(0, 0, width, height)
 
   ctx.globalCompositeOperation = "destination-in"
   ctx.drawImage(cloudMask(width, height, area, seed), 0, 0)
+
   return canvas
 }
 
@@ -189,4 +197,8 @@ function mulberry32(seed: number): () => number {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
+}
+
+function css([r, g, b]: Rgb): string {
+  return `rgb(${r}, ${g}, ${b})`
 }
