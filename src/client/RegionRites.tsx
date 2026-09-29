@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react"
 import { isReturned, type Hunter, type RegionSlot, type Rite } from "../shared/world.js"
 import { Chooser, sendTake } from "./Chooser.js"
-import { useWords, type Words } from "./words/index.js"
+import { sayRefusal, useWords, type Words } from "./words/index.js"
 
 /** The rites a region performs itself, before or beside any one village. */
 const REGION_RITES = ["interview", "write-spec", "make-verify"] as const
@@ -42,7 +42,7 @@ export function RegionRites({
   const send = (rite: Rite) => {
     const holder = hunters.find((h) => !isReturned(h))
     if (holder) {
-      setRefusal(words.hunter.refusal(name, holder))
+      setRefusal(sayRefusal(words, { reason: "busy", place: name, holder }))
       return
     }
     setRefusal(undefined)

@@ -106,16 +106,6 @@ export const RITE_GROUND: Record<Rite, "contract" | "village" | "region"> = {
   "make-verify": "region",
 }
 
-/** Each rite as the world names it. */
-export const RITE_NAMES: Record<Rite, string> = {
-  "implement-slice": "Take the contract",
-  interview: "Hear the villagers",
-  "write-spec": "Draft the bounty",
-  "write-slices": "Post contracts",
-  "make-verify": "Set the proof of kill",
-  "sign-off": "Inspect the trophy",
-}
-
 /**
  * A Claude Code session on the map: one Guslar started on a rite, while its process runs, or one
  * started outside Guslar in a registered repo (`outside`), seen through its hooks until it ends.
@@ -205,27 +195,38 @@ export type HookRequest = {
 /** What Guslar answers the hook on a `PermissionRequest`: your decision, or none when there is none to give. */
 export type HookReply = { heard: boolean; decision?: PermissionAnswer }
 
-/** What a hunter is out for, as a phrase after "out": `on S3`, or `to post contracts`. */
-export function errandOf(hunter: Pick<Hunter, "rite" | "contract">): string {
-  switch (hunter.rite) {
-    case undefined:
-      return "on an errand of its own"
-    case "implement-slice":
-      return `on ${hunter.contract ?? "a contract"}`
-    case "sign-off":
-      return `to inspect the trophy of ${hunter.contract ?? "a contract"}`
-    default:
-      return `to ${RITE_NAMES[hunter.rite].toLowerCase()}`
-  }
-}
+/** The hunter a village or region is held by, as a refusal names it. */
+export type Holder = Pick<Hunter, "name" | "rite" | "contract">
 
 /**
- * A village takes one hunter at a time, and so does a region for its own rites; this is what
- * either says to a second one.
+ * Why the server would not do what a map asked, as a reason code and the facts it names, with no
+ * words: the map says it in its world's own. A refused request is answered `{ refusal }`, with the
+ * HTTP status that says so; a request that cannot be read at all is answered `{ error }`.
  */
-export function refusalOf(place: { title: string }, holder: Pick<Hunter, "name" | "rite" | "contract">): string {
-  return `${place.title} refuses a second hunter: ${holder.name} is out ${errandOf(holder)}.`
-}
+export type Refusal =
+  | { reason: "no-region"; slot: string }
+  | { reason: "no-village"; region: string; village?: string }
+  | { reason: "no-contract"; village?: string; contract?: string }
+  /** A village takes one hunter at a time, and so does a region for its own rites. */
+  | { reason: "busy"; place: string; holder: Holder }
+  | { reason: "being-sent"; place: string }
+  | { reason: "not-ready"; village?: string; contract: string; state: ContractState }
+  | { reason: "not-pending"; village?: string; contract: string; state: ContractState }
+  | { reason: "contracts-posted"; village: string }
+  | { reason: "cannot-start"; program: string; problem: string }
+  | { reason: "no-hunter" }
+  | { reason: "outside"; hunter: string }
+  | { reason: "empty-reply" }
+  | { reason: "no-session"; hunter: string }
+  | { reason: "cannot-resume"; hunter: string; problem: string }
+  | { reason: "not-listening"; hunter: string }
+  | { reason: "not-begun"; hunter: string }
+  | { reason: "cannot-open-terminal"; hunter: string; problem: string }
+  | { reason: "not-waiting"; hunter: string }
+  | { reason: "still-out"; hunter: string }
+
+/** What the server answers a request it refused. */
+export type Refused = { refusal: Refusal }
 
 export type ServerMessage = { type: "world"; world: WorldState }
 

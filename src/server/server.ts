@@ -13,6 +13,8 @@ import {
   isRegionSlot,
   isRite,
   type PermissionAnswer,
+  type Refusal,
+  type Refused,
   RITE_GROUND,
   RITES,
   type ServerMessage,
@@ -79,6 +81,11 @@ function pageOf(dir: string, theme: Theme): string {
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" })
   res.end(JSON.stringify(body))
+}
+
+/** The body of a refused request: the reason, with no words, which the map says in its own. */
+function refused(refusal: Refusal): Refused {
+  return { refusal }
 }
 
 function readBody(req: IncomingMessage, max: number): Promise<string> {
@@ -204,7 +211,7 @@ export async function startServer(options: {
     }
     const result = await hunters.take(request, slots)
     if ("hunter" in result) sendJson(res, 201, result)
-    else sendJson(res, result.status, { error: result.error })
+    else sendJson(res, result.status, refused(result.refusal))
   }
 
   const reply = async (id: string, req: IncomingMessage, res: ServerResponse) => {
@@ -217,7 +224,7 @@ export async function startServer(options: {
     }
     const result = await hunters.reply(id, text)
     if ("sent" in result) sendJson(res, 201, result)
-    else sendJson(res, result.status, { error: result.error })
+    else sendJson(res, result.status, refused(result.refusal))
   }
 
   const answer = async (id: string, promptId: string, req: IncomingMessage, res: ServerResponse) => {
@@ -230,7 +237,7 @@ export async function startServer(options: {
     }
     const result = hunters.answer(id, promptId, decision)
     if ("answered" in result) sendJson(res, 200, result)
-    else sendJson(res, result.status, { error: result.error })
+    else sendJson(res, result.status, refused(result.refusal))
   }
 
   const openTerminal = async (id: string, req: IncomingMessage, res: ServerResponse) => {
@@ -238,7 +245,7 @@ export async function startServer(options: {
     if (raw === undefined) return
     const result = await hunters.openTerminal(id)
     if ("hunter" in result) sendJson(res, result.opened ? 201 : 200, { hunter: result.hunter })
-    else sendJson(res, result.status, { error: result.error })
+    else sendJson(res, result.status, refused(result.refusal))
   }
 
   /**
@@ -253,7 +260,7 @@ export async function startServer(options: {
     }
     const result = hunters.sendHome(id)
     if ("hunter" in result) sendJson(res, 200, result)
-    else sendJson(res, result.status, { error: result.error })
+    else sendJson(res, result.status, refused(result.refusal))
   }
 
   /**

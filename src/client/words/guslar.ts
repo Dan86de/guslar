@@ -1,9 +1,11 @@
 import type {
   Autonomy,
   Contract,
+  ContractState,
   Hunter,
   HunterState,
   PermissionMode,
+  Refusal,
   RegionSlot,
   Rite,
   VillageStage,
@@ -44,6 +46,17 @@ function returned(hunter: Pick<Hunter, "name" | "state">): string | undefined {
       return undefined
   }
 }
+
+/** A contract's state as a refusal says it: `S4 of Drain the bog is sealed`. */
+const CONTRACT_STATES: Record<ContractState, string> = {
+  done: "done",
+  pending: "pending",
+  ready: "ready",
+  sealed: "sealed",
+}
+
+/** Every refusal the server sends, as a theme words it: one wording per reason code, given its facts. */
+export type Refusals = { [R in Refusal as R["reason"]]: (refusal: R) => string }
 
 /**
  * Every word Guslar's map says, keyed by what it means rather than where it stands, so a theme can
@@ -99,13 +112,33 @@ export const guslar = {
     out: (hunter: Pick<Hunter, "name" | "rite" | "contract">) => `${hunter.name} is out ${errand(hunter)}`,
     hunts: (name: string) => `${name} hunts it`,
     inspects: (name: string) => `${name} inspects it`,
-    /**
-     * A village takes one hunter at a time, and so does a region for its own rites; this is what
-     * either says to a second one.
-     */
-    refusal: (place: string, holder: Pick<Hunter, "name" | "rite" | "contract">) =>
-      `${place} refuses a second hunter: ${holder.name} is out ${errand(holder)}.`,
   },
+
+  /** Why the server, or the map before asking it, would not do what you asked. */
+  refusals: {
+    "no-region": ({ slot }) => `No region stands in the ${slot} slot.`,
+    "no-village": ({ region, village }) => `${region} has no village ${village ?? "named"}.`,
+    "no-contract": ({ village, contract }) => `${village ?? "The village"} has no contract ${contract ?? "named"} posted.`,
+    /** A village takes one hunter at a time, and so does a region for its own rites. */
+    busy: ({ place, holder }) => `${place} refuses a second hunter: ${holder.name} is out ${errand(holder)}.`,
+    "being-sent": ({ place }) => `${place} refuses a second hunter: one is being sent already.`,
+    "not-ready": ({ village, contract, state }) =>
+      `${contract} of ${village ?? "the village"} is ${CONTRACT_STATES[state]}, not ready to take.`,
+    "not-pending": ({ village, contract, state }) =>
+      `${contract} of ${village ?? "the village"} is ${CONTRACT_STATES[state]}, not awaiting sign-off.`,
+    "contracts-posted": ({ village }) => `${village} has its contracts posted already.`,
+    "cannot-start": ({ program, problem }) => `Could not start ${program}: ${problem}`,
+    "no-hunter": () => "No such hunter is out.",
+    outside: ({ hunter }) => `${hunter} was started outside Guslar: write to it in its own terminal.`,
+    "empty-reply": () => "A reply needs words.",
+    "no-session": ({ hunter }) => `${hunter} has no session to resume.`,
+    "cannot-resume": ({ hunter, problem }) => `Could not resume ${hunter}'s session: ${problem}`,
+    "not-listening": ({ hunter }) => `${hunter} no longer listens.`,
+    "not-begun": ({ hunter }) => `${hunter}'s session has not begun yet.`,
+    "cannot-open-terminal": ({ hunter, problem }) => `Could not open a terminal for ${hunter}: ${problem}`,
+    "not-waiting": ({ hunter }) => `${hunter} is no longer waiting on that.`,
+    "still-out": ({ hunter }) => `${hunter} is still out: it can only be sent home once it is back.`,
+  } satisfies Refusals,
 
   /** What a hunter is bound to and out for, as its journal, its petitions and the map's list say it. */
   bound: {
@@ -184,8 +217,6 @@ export const guslar = {
     you: "You",
     turnEnds: "The turn ends.",
     turnFails: (text: string) => `The turn ends in failure${text ? `: ${text}` : "."}`,
-    stillOut: (name: string) => `${name} is still out: it can only be sent home once it is back.`,
-    notBegun: (name: string) => `${name}'s session has not begun yet.`,
     openTerminal: "Open in terminal",
     sendHome: "Send home",
     close: "Close the journal",

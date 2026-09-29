@@ -8,7 +8,7 @@ import {
   type Village,
 } from "../shared/world.js"
 import { Chooser, sendTake } from "./Chooser.js"
-import { useWords, type Words } from "./words/index.js"
+import { sayRefusal, useWords, type Words } from "./words/index.js"
 
 /** A rite the board sends a hunter on: a contract's hunt or inspection, or posting the village's contracts. */
 type Errand = { rite: Rite; contract?: Contract }
@@ -116,7 +116,7 @@ export function NoticeBoard({
     // A hunter that has returned holds it no longer.
     const holder = hunters.find((h) => !isReturned(h))
     if (holder) {
-      setRefusal(words.hunter.refusal(village.title, holder))
+      setRefusal(sayRefusal(words, { reason: "busy", place: village.title, holder }))
       return
     }
     setRefusal(undefined)

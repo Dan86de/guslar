@@ -1,6 +1,7 @@
 import { boundOf } from "./bound.js"
 import { useId, useState, type SyntheticEvent } from "react"
 import type { Hunter, PermissionAnswer, PermissionPrompt, WorldState } from "../shared/world.js"
+import { whyRefused } from "./refused.js"
 import { useWords, type Words } from "./words/index.js"
 
 /** Sends your answer to the server, and returns why it was refused, or nothing when the hunter's hook got it. */
@@ -12,8 +13,7 @@ async function sendAnswer(words: Words, hunter: Hunter, prompt: PermissionPrompt
       body: JSON.stringify(answer),
     })
     if (res.ok) return undefined
-    const body = (await res.json().catch(() => ({}))) as { error?: string }
-    return body.error ?? words.server.answered(res.status)
+    return await whyRefused(words, res)
   } catch {
     return words.server.unreachable
   }

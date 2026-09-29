@@ -15,12 +15,13 @@ import type {
   JournalEntry,
   PermissionAnswer,
   PermissionPrompt,
+  Refusal,
   Rite,
   SlotState,
   TakeRequest,
   Village,
 } from "../shared/world.js"
-import { isPermissionMode, isReturned, refusalOf, RITE_GROUND } from "../shared/world.js"
+import { isPermissionMode, isReturned, RITE_GROUND } from "../shared/world.js"
 import { Terminal } from "./terminals.js"
 
 /** Names handed out in order, the first one no hunter out is using. Original, from Slavic naming, none from the Witcher. */
@@ -40,22 +41,22 @@ const NAMES = [
 ]
 
 /** What a take came to: the hunter sent out, or why none was, with the HTTP status that says so. */
-export type TakeResult = { hunter: Hunter } | { status: number; error: string }
+export type TakeResult = { hunter: Hunter } | { status: number; refusal: Refusal }
 
 /** What a reply came to: written to the hunter, or why not, with the HTTP status that says so. */
-export type ReplyResult = { sent: JournalEntry } | { status: number; error: string }
+export type ReplyResult = { sent: JournalEntry } | { status: number; refusal: Refusal }
 
 /** What an answer to a prompt came to: given to the waiting hook, or why not, with the HTTP status that says so. */
-export type AnswerResult = { answered: PermissionPrompt } | { status: number; error: string }
+export type AnswerResult = { answered: PermissionPrompt } | { status: number; refusal: Refusal }
 
 /**
  * What opening a hunter's terminal came to: the hunter with its terminal, `opened` when this
  * started it and not when it was already open, or why not, with the HTTP status that says so.
  */
-export type TerminalResult = { hunter: Hunter; opened: boolean } | { status: number; error: string }
+export type TerminalResult = { hunter: Hunter; opened: boolean } | { status: number; refusal: Refusal }
 
 /** What sending a hunter home came to: the hunter that went, or why it stayed, with the HTTP status that says so. */
-export type SendHomeResult = { hunter: Hunter } | { status: number; error: string }
+export type SendHomeResult = { hunter: Hunter } | { status: number; refusal: Refusal }
 
 /**
  * A permission request its hunter's hook is waiting on: `decision` settles with your answer, or
@@ -133,14 +134,14 @@ function settled(hunter: Hunter): boolean {
 }
 
 /** Why a rite cannot be performed on what it names as the world stands, or undefined when it can. */
-function unfitFor(rite: Rite, village: Village | undefined, contract: Contract | undefined): string | undefined {
+function unfitFor(rite: Rite, village: Village | undefined, contract: Contract | undefined): Refusal | undefined {
   if (rite === "implement-slice" && contract && contract.state !== "ready") {
-    return `${contract.id} of ${village?.title} is ${contract.state}, not ready to take.`
+    return { reason: "not-ready", village: village?.title, contract: contract.id, state: contract.state }
   }
   if (rite === "sign-off" && contract && contract.state !== "pending") {
-    return `${contract.id} of ${village?.title} is ${contract.state}, not awaiting sign-off.`
+    return { reason: "not-pending", village: village?.title, contract: contract.id, state: contract.state }
   }
-  if (rite === "write-slices" && village?.slices) return `${village.title} has its contracts posted already.`
+  if (rite === "write-slices" && village?.slices) return { reason: "contracts-posted", village: village.title }
   return undefined
 }
 
@@ -454,17 +455,17 @@ export class Hunters {
     const rite = request.rite ?? "implement-slice"
     const ground = RITE_GROUND[rite]
     const region = slots.find((slot) => slot.slot === request.slot)
-    if (region?.kind !== "region") return { status: 404, error: `No region stands in the ${request.slot} slot.` }
+    if (region?.kind !== "region") return { status: 404, refusal: { reason: "no-region", slot: request.slot } }
     let village: Village | undefined
     let contract: Contract | undefined
     if (ground !== "region") {
       village = region.villages.find((v) => v.slug === request.village)
-      if (!village) return { status: 404, error: `${region.name} has no village ${request.village ?? "named"}.` }
+      if (!village) return { status: 404, refusal: { reason: "no-village", region: region.name, village: request.village } }
     }
     if (ground === "contract") {
       contract = village?.contracts.find((c) => c.id === request.contract)
       if (!village?.slices || !contract) {
-        return { status: 404, error: `${village?.title} has no contract ${request.contract ?? "named"} posted.` }
+        return { status: 404, refusal: { reason: "no-contract", village: village?.title, contract: request.contract } }
       }
     }
 
@@ -474,12 +475,12 @@ export class Hunters {
     )
     const title = village?.title ?? region.name
     const holder = around.find((h) => !isReturned(h))
-    if (holder) return { status: 409, error: refusalOf({ title }, holder) }
+    if (holder) return { status: 409, refusal: { reason: "busy", place: title, holder: { name: holder.name, rite: holder.rite, contract: holder.contract } } }
     // A hunter being sent holds its place too, while its claude starts.
     const place = `${request.slot}/${village?.slug ?? ""}`
-    if (this.sending.has(place)) return { status: 409, error: `${title} refuses a second hunter: one is being sent already.` }
+    if (this.sending.has(place)) return { status: 409, refusal: { reason: "being-sent", place: title } }
     const unfit = unfitFor(rite, village, contract)
-    if (unfit) return { status: 409, error: unfit }
+    if (unfit) return { status: 409, refusal: unfit }
     this.sending.add(place)
     try {
       return await this.send(request, rite, region, village, contract, around)
@@ -499,7 +500,7 @@ export class Hunters {
   ): Promise<TakeResult> {
     const id = randomUUID()
     const child = await this.launch(id, region.repo, claudeArgs(request.permissionMode))
-    if (child instanceof Error) return { status: 502, error: `Could not start ${this.claude}: ${child.message}` }
+    if (child instanceof Error) return { status: 502, refusal: { reason: "cannot-start", program: this.claude, problem: child.message } }
 
     // A hunter back in this village or region makes way for the new one, and its name is free again.
     for (const returned of around) this.dismiss(returned.id)
@@ -573,13 +574,13 @@ export class Hunters {
   async reply(id: string, text: string): Promise<ReplyResult> {
     const entry = this.out.get(id)
     const outsider = this.outsiderOf(id)?.hunter
-    if (outsider) return { status: 409, error: `${outsider.name} was started outside Guslar: write to it in its own terminal.` }
-    if (!entry) return { status: 404, error: "No such hunter is out." }
+    if (outsider) return { status: 409, refusal: { reason: "outside", hunter: outsider.name } }
+    if (!entry) return { status: 404, refusal: { reason: "no-hunter" } }
     const trimmed = text.trim()
-    if (trimmed === "") return { status: 400, error: "A reply needs words." }
+    if (trimmed === "") return { status: 400, refusal: { reason: "empty-reply" } }
     if (!entry.process) {
       const sessionId = entry.hunter.sessionId
-      if (!sessionId) return { status: 409, error: `${entry.hunter.name} has no session to resume.` }
+      if (!sessionId) return { status: 409, refusal: { reason: "no-session", hunter: entry.hunter.name } }
       entry.waking ??= this.launch(id, entry.repo, claudeArgs(entry.hunter.permissionMode, sessionId)).then((child) => {
         delete entry.waking
         if (child instanceof Error) return child
@@ -588,10 +589,10 @@ export class Hunters {
         return undefined
       })
       const failed = await entry.waking
-      if (failed) return { status: 502, error: `Could not resume ${entry.hunter.name}'s session: ${failed.message}` }
-      if (this.out.get(id) !== entry) return { status: 404, error: "No such hunter is out." }
+      if (failed) return { status: 502, refusal: { reason: "cannot-resume", hunter: entry.hunter.name, problem: failed.message } }
+      if (this.out.get(id) !== entry) return { status: 404, refusal: { reason: "no-hunter" } }
     }
-    if (!entry.process?.stdin.writable) return { status: 409, error: `${entry.hunter.name} no longer listens.` }
+    if (!entry.process?.stdin.writable) return { status: 409, refusal: { reason: "not-listening", hunter: entry.hunter.name } }
     entry.process.stdin.write(userMessage(trimmed))
     const sent: JournalEntry = { kind: "you", text: trimmed }
     entry.hunter.journal.push(sent)
@@ -610,16 +611,16 @@ export class Hunters {
   async openTerminal(id: string): Promise<TerminalResult> {
     const entry = this.out.get(id)
     const outsider = this.outsiderOf(id)?.hunter
-    if (outsider) return { status: 409, error: `${outsider.name} was started outside Guslar, in a terminal of its own.` }
-    if (!entry) return { status: 404, error: "No such hunter is out." }
+    if (outsider) return { status: 409, refusal: { reason: "outside", hunter: outsider.name } }
+    if (!entry) return { status: 404, refusal: { reason: "no-hunter" } }
     const { hunter } = entry
     const sessionId = hunter.sessionId
-    if (!sessionId) return { status: 409, error: `${hunter.name}'s session has not begun yet.` }
+    if (!sessionId) return { status: 409, refusal: { reason: "not-begun", hunter: hunter.name } }
 
     const previous = entry.terminal
     if (previous) {
       const terminal = await previous
-      if (this.out.get(id) !== entry) return { status: 404, error: "No such hunter is out." }
+      if (this.out.get(id) !== entry) return { status: 404, refusal: { reason: "no-hunter" } }
       // Another open started a terminal while this one waited: that one is the hunter's.
       if (entry.terminal !== previous) return this.openTerminal(id)
       if (terminal instanceof Terminal && terminal.running) return { hunter, opened: false }
@@ -641,12 +642,12 @@ export class Hunters {
     const terminal = await opening
     if (terminal instanceof Error) {
       if (entry.terminal === opening) delete entry.terminal
-      return { status: 502, error: `Could not open a terminal for ${hunter.name}: ${terminal.message}` }
+      return { status: 502, refusal: { reason: "cannot-open-terminal", hunter: hunter.name, problem: terminal.message } }
     }
     if (this.out.get(id) !== entry) {
       // The hunter left the map while its terminal opened.
       terminal.kill()
-      return { status: 404, error: "No such hunter is out." }
+      return { status: 404, refusal: { reason: "no-hunter" } }
     }
     hunter.terminal = { state: "open" }
     this.changed()
@@ -868,9 +869,9 @@ export class Hunters {
   /** Gives your answer to a hunter's prompt to the hook waiting on it. */
   answer(id: string, promptId: string, answer: PermissionAnswer): AnswerResult {
     const entry = this.out.get(id)
-    if (!entry) return { status: 404, error: "No such hunter is out." }
+    if (!entry) return { status: 404, refusal: { reason: "no-hunter" } }
     const pending = entry.asking.find((p) => p.prompt.id === promptId)
-    if (!pending) return { status: 409, error: `${entry.hunter.name} is no longer waiting on that.` }
+    if (!pending) return { status: 409, refusal: { reason: "not-waiting", hunter: entry.hunter.name } }
     this.settle(id, promptId, answer)
     return { answered: pending.prompt }
   }
@@ -998,9 +999,9 @@ export class Hunters {
    */
   sendHome(id: string): SendHomeResult {
     const hunter = this.find(id)
-    if (!hunter) return { status: 404, error: "No such hunter is out." }
+    if (!hunter) return { status: 404, refusal: { reason: "no-hunter" } }
     if (!isReturned(hunter)) {
-      return { status: 409, error: `${hunter.name} is still out: it can only be sent home once it is back.` }
+      return { status: 409, refusal: { reason: "still-out", hunter: hunter.name } }
     }
     this.dismiss(id)
     // `dismiss` keeps the roll; every open map hears of it here.

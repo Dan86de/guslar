@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react"
 import { PERMISSION_MODES, type PermissionMode, type TakeRequest } from "../shared/world.js"
+import { whyRefused } from "./refused.js"
 import { useWords, type Words } from "./words/index.js"
 
 /**
@@ -112,8 +113,7 @@ export async function sendTake(words: Words, request: TakeRequest): Promise<stri
       body: JSON.stringify(request),
     })
     if (res.ok) return undefined
-    const body = (await res.json().catch(() => ({}))) as { error?: string }
-    return body.error ?? words.server.answered(res.status)
+    return await whyRefused(words, res)
   } catch {
     return words.server.unreachable
   }

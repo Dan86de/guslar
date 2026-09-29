@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { request } from "node:http"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
-import type { Hunter, TakeRequest, WorldState } from "../src/shared/world.js"
+import type { Hunter, Refusal, TakeRequest, WorldState } from "../src/shared/world.js"
 import { bogwater, type FixtureRegion } from "./fixture-region.js"
 import {
   awaitWorld,
@@ -84,9 +84,9 @@ async function take(guslar: Running, request: TakeRequest): Promise<Hunter | und
 }
 
 /** Sends a hunter home the way the map does: a DELETE on the hunter itself, carrying nothing. */
-async function sendHome(guslar: Running, id: string): Promise<{ status: number; body: { hunter?: Hunter; error?: string } }> {
+async function sendHome(guslar: Running, id: string): Promise<{ status: number; body: { hunter?: Hunter; refusal?: Refusal } }> {
   const res = await fetch(new URL(`/api/hunters/${id}`, guslar.url), { method: "DELETE", headers: asTheMap(guslar) })
-  return { status: res.status, body: (await res.json()) as { hunter?: Hunter; error?: string } }
+  return { status: res.status, body: (await res.json()) as { hunter?: Hunter; refusal?: Refusal } }
 }
 
 /** Opens a hunter's terminal the way its journal does, so a claude resumes its session in a PTY. */
@@ -281,7 +281,7 @@ describe("send a hunter home", () => {
 
     const refused = await sendHome(running, id)
     expect(refused.status).toBe(409)
-    expect(refused.body.error).toBe("Wojmir is still out: it can only be sent home once it is back.")
+    expect(refused.body.refusal).toEqual({ reason: "still-out", hunter: "Wojmir" })
 
     // Still on the map: in the broadcast every open map follows, and in the world read over HTTP,
     // with the journal it had before the refusal.
@@ -303,7 +303,7 @@ describe("send a hunter home", () => {
 
     const refused = await sendHome(running, id)
     expect(refused.status).toBe(409)
-    expect(refused.body.error).toBe("Wojmir is still out: it can only be sent home once it is back.")
+    expect(refused.body.refusal).toEqual({ reason: "still-out", hunter: "Wojmir" })
 
     // The request is still out, and its hook has had nothing back. Letting go of an unanswered
     // request tells the hook Guslar is gone, whose fallback is to allow: sending this hunter home
@@ -320,14 +320,14 @@ describe("send a hunter home", () => {
 
     const unknown = await sendHome(running, randomUUID())
     expect(unknown.status).toBe(404)
-    expect(unknown.body.error).toBe("No such hunter is out.")
+    expect(unknown.body.refusal).toEqual({ reason: "no-hunter" })
 
     // Pressing twice is how this happens: the second press finds nothing left to send.
     const id = await backWithATrophy(running, bog, gates)
     expect((await sendHome(running, id)).status).toBe(200)
     const again = await sendHome(running, id)
     expect(again.status).toBe(404)
-    expect(again.body.error).toBe("No such hunter is out.")
+    expect(again.body.refusal).toEqual({ reason: "no-hunter" })
   })
 
   it("refuses a request that did not come from the map this Guslar serves", async () => {

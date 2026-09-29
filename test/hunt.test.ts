@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import WebSocket from "ws"
 import { afterEach, describe, expect, it } from "vitest"
-import type { Hunter, HunterState, ServerMessage, TakeRequest, WorldState } from "../src/shared/world.js"
+import type { Hunter, HunterState, Refusal, ServerMessage, TakeRequest, WorldState } from "../src/shared/world.js"
 import { bogwater, type FixtureRegion } from "./fixture-region.js"
 import { fixtures, receiveWorld, startGuslar, tempDir, waitFor, type Running } from "./guslar.js"
 
@@ -30,13 +30,13 @@ function statesOf(worlds: WorldState[], id: string): HunterState[] {
   return states
 }
 
-async function take(guslar: Running, request: TakeRequest): Promise<{ status: number; body: { hunter?: Hunter; error?: string } }> {
+async function take(guslar: Running, request: TakeRequest): Promise<{ status: number; body: { hunter?: Hunter; refusal?: Refusal } }> {
   const res = await fetch(new URL("/api/hunters", guslar.url), {
     method: "POST",
     headers: { "content-type": "application/json", origin: new URL(guslar.url).origin },
     body: JSON.stringify(request),
   })
-  return { status: res.status, body: (await res.json()) as { hunter?: Hunter; error?: string } }
+  return { status: res.status, body: (await res.json()) as { hunter?: Hunter; refusal?: Refusal } }
 }
 
 describe("a hunter's states, from its stream to its return", () => {

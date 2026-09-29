@@ -3,6 +3,7 @@ import { Terminal } from "@xterm/xterm"
 import "@xterm/xterm/css/xterm.css"
 import { useEffect, useId, useRef, useState } from "react"
 import type { Hunter, TerminalInput, TerminalOutput } from "../shared/world.js"
+import { whyRefused } from "./refused.js"
 import { useWords, type Words } from "./words/index.js"
 
 /** Asks the server to resume a hunter's session in a terminal, and returns why it would not, or nothing once it is open. */
@@ -14,8 +15,7 @@ async function openTerminal(words: Words, hunter: Hunter): Promise<string | unde
       body: "{}",
     })
     if (res.ok) return undefined
-    const body = (await res.json().catch(() => ({}))) as { error?: string }
-    return body.error ?? words.server.answered(res.status)
+    return await whyRefused(words, res)
   } catch {
     return words.server.unreachable
   }

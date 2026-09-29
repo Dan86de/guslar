@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { promisify } from "node:util"
 import { afterEach, describe, expect, it } from "vitest"
-import type { Hunter, PermissionAnswer, PermissionPrompt, TakeRequest, WorldState } from "../src/shared/world.js"
+import type { Hunter, PermissionAnswer, PermissionPrompt, Refusal, TakeRequest, WorldState } from "../src/shared/world.js"
 import { bogwater } from "./fixture-region.js"
 import { awaitWorld, fixtures, receiveWorld, runGuslar, startGuslar, tempDir, waitFor, type Running } from "./guslar.js"
 
@@ -30,8 +30,8 @@ function post(running: Running, route: string, body: unknown, headers: Record<st
 }
 
 async function take(running: Running): Promise<Hunter> {
-  const body = (await (await post(running, "/api/hunters", S3)).json()) as { hunter?: Hunter; error?: string }
-  if (!body.hunter) throw new Error(`no hunter: ${body.error}`)
+  const body = (await (await post(running, "/api/hunters", S3)).json()) as { hunter?: Hunter; refusal?: Refusal }
+  if (!body.hunter) throw new Error(`no hunter: ${JSON.stringify(body.refusal)}`)
   return body.hunter
 }
 

@@ -1,6 +1,7 @@
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type SyntheticEvent } from "react"
 import { isReturned, type Hunter, type JournalEntry, type ReplyRequest } from "../shared/world.js"
-import { useWords, type Words } from "./words/index.js"
+import { whyRefused } from "./refused.js"
+import { sayRefusal, useWords, type Words } from "./words/index.js"
 
 /** Sends a reply to the server, and returns why it was refused, or nothing when the hunter got it. */
 async function sendReply(words: Words, hunter: Hunter, text: string): Promise<string | undefined> {
@@ -12,8 +13,7 @@ async function sendReply(words: Words, hunter: Hunter, text: string): Promise<st
       body: JSON.stringify(request),
     })
     if (res.ok) return undefined
-    const body = (await res.json().catch(() => ({}))) as { error?: string }
-    return body.error ?? words.server.answered(res.status)
+    return await whyRefused(words, res)
   } catch {
     return words.server.unreachable
   }
@@ -106,7 +106,7 @@ export function Journal({
   // Only a hunter that has come back goes home: one still out may hold a permission request, and
   // letting go of an unanswered request is read by its hook as Guslar being gone, which allows it.
   const back = isReturned(hunter)
-  const stillOut = words.journal.stillOut(hunter.name)
+  const stillOut = sayRefusal(words, { reason: "still-out", hunter: hunter.name })
 
   // A layout effect, not a passive one: React runs every layout effect before any passive effect,
   // so showing the dialog here is what lets the effect below measure it. Shown passively, it is
@@ -172,7 +172,7 @@ export function Journal({
                 type="button"
                 className="journal-act"
                 disabled={!hunter.sessionId}
-                title={hunter.sessionId ? undefined : words.journal.notBegun(hunter.name)}
+                title={hunter.sessionId ? undefined : sayRefusal(words, { reason: "not-begun", hunter: hunter.name })}
                 onClick={onOpenTerminal}
               >
                 {words.journal.openTerminal}

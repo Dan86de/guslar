@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
-import type { Hunter, TakeRequest, WorldState } from "../src/shared/world.js"
+import type { Hunter, Refusal, TakeRequest, WorldState } from "../src/shared/world.js"
 import { bogwater } from "./fixture-region.js"
 import { awaitWorld, fixtures, receiveWorld, startGuslar, tempDir, waitFor, type Running } from "./guslar.js"
 
@@ -28,18 +28,18 @@ async function startedFor(guslar: Running, hunterId: string): Promise<{ cwd: str
 }
 
 /** Sends a hunter the way the map does: a JSON POST from the server's own origin. */
-async function take(guslar: Running, request: TakeRequest): Promise<{ status: number; body: { hunter?: Hunter; error?: string } }> {
+async function take(guslar: Running, request: TakeRequest): Promise<{ status: number; body: { hunter?: Hunter; refusal?: Refusal } }> {
   const res = await fetch(new URL("/api/hunters", guslar.url), {
     method: "POST",
     headers: { "content-type": "application/json", origin: new URL(guslar.url).origin },
     body: JSON.stringify(request),
   })
-  return { status: res.status, body: (await res.json()) as { hunter?: Hunter; error?: string } }
+  return { status: res.status, body: (await res.json()) as { hunter?: Hunter; refusal?: Refusal } }
 }
 
 async function sent(guslar: Running, request: TakeRequest): Promise<Hunter> {
   const { status, body } = await take(guslar, request)
-  if (status !== 201 || !body.hunter) throw new Error(`no hunter (${status}): ${body.error}`)
+  if (status !== 201 || !body.hunter) throw new Error(`no hunter (${status}): ${JSON.stringify(body.refusal)}`)
   return body.hunter
 }
 
@@ -62,10 +62,10 @@ describe("the other rites", () => {
     await receiveWorld(guslar.url)
     const repo = realpathSync(bog.repo)
 
-    for (const [rite, opening, errand] of [
-      ["interview", "/interview", "to hear the villagers"],
-      ["write-spec", "/write-spec", "to draft the bounty"],
-      ["make-verify", "/make-verify", "to set the proof of kill"],
+    for (const [rite, opening] of [
+      ["interview", "/interview"],
+      ["write-spec", "/write-spec"],
+      ["make-verify", "/make-verify"],
     ] as const) {
       const hunter = await sent(guslar, { slot: "forest", rite, permissionMode: "acceptEdits" })
       const started = await startedFor(guslar, hunter.id)
@@ -82,7 +82,7 @@ describe("the other rites", () => {
       // A region takes one hunter at a time for its own rites; this one has not come back yet.
       expect(await take(guslar, { slot: "forest", rite: "write-spec", permissionMode: "default" })).toEqual({
         status: 409,
-        body: { error: `Bogwater Reach refuses a second hunter: ${hunter.name} is out ${errand}.` },
+        body: { refusal: { reason: "busy", place: "Bogwater Reach", holder: { name: hunter.name, rite } } },
       })
       // Its villages take their own hunters meanwhile.
       const inVillage = await sent(guslar, { slot: "forest", village: "drain-the-bog", contract: "S3", permissionMode: "default" })
@@ -119,12 +119,12 @@ describe("the other rites", () => {
     // The village is held: no other rite goes there while its hunter is out.
     expect(await take(guslar, { slot: "forest", rite: "write-slices", village: "ward-the-well", permissionMode: "default" })).toEqual({
       status: 409,
-      body: { error: "Ward the well refuses a second hunter: Wojmir is out to post contracts." },
+      body: { refusal: { reason: "busy", place: "Ward the well", holder: { name: "Wojmir", rite: "write-slices" } } },
     })
     // A village whose contracts are posted has none to post.
     expect(await take(guslar, { slot: "forest", rite: "write-slices", village: "drain-the-bog", permissionMode: "default" })).toEqual({
       status: 409,
-      body: { error: "Drain the bog has its contracts posted already." },
+      body: { refusal: { reason: "contracts-posted", village: "Drain the bog" } },
     })
   })
 
@@ -140,7 +140,7 @@ describe("the other rites", () => {
     ]) {
       expect(await take(guslar, { slot: "forest", rite: "sign-off", village: "drain-the-bog", contract, permissionMode: "default" })).toEqual({
         status: 409,
-        body: { error: `${contract} of Drain the bog is ${state}, not awaiting sign-off.` },
+        body: { refusal: { reason: "not-pending", village: "Drain the bog", contract, state } },
       })
     }
 
@@ -156,7 +156,7 @@ describe("the other rites", () => {
     })
     expect(await take(guslar, { slot: "forest", village: "drain-the-bog", contract: "S3", permissionMode: "default" })).toEqual({
       status: 409,
-      body: { error: `Drain the bog refuses a second hunter: ${hunter.name} is out to inspect the trophy of S2.` },
+      body: { refusal: { reason: "busy", place: "Drain the bog", holder: { name: hunter.name, rite: "sign-off", contract: "S2" } } },
     })
 
     // The inspection is paid once the sign-off lands and the contract is done.
