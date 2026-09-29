@@ -524,6 +524,47 @@ button.plaque:focus-visible {
   margin: 16px 0 10px;
 }
 
+/* What the sender tells the hunter: a field ruled onto the parchment, not a browser's box. */
+.chooser-said-label {
+  display: block;
+}
+
+.chooser-said {
+  display: block;
+  width: 100%;
+  /* It grows with what is written, up to a point, so no browser's resize grip sits on the parchment.
+     The heights are border-box, so they carry the 17px of padding and the 2px of border with them. */
+  min-height: calc(3lh + 19px);
+  max-height: calc(12lh + 19px);
+  padding: 8px 12px 9px;
+  color: var(--ink);
+  font: inherit;
+  background: rgb(255 250 235 / 0.35);
+  border: 1px solid rgb(36 28 20 / 0.55);
+  border-radius: 2px;
+  resize: none;
+  field-sizing: content;
+}
+
+.chooser-said:focus-visible {
+  background: rgb(255 250 235 / 0.7);
+  border-color: var(--rust);
+  outline: 1px solid var(--rust);
+}
+
+.chooser-said:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.chooser-said-hint {
+  margin: 5px 0 0;
+  color: rgb(36 28 20 / 0.78);
+  font-size: 15px;
+  font-style: italic;
+  line-height: 1.25;
+}
+
 .chooser-modes {
   display: grid;
   gap: 8px;

@@ -145,7 +145,7 @@ function unfitFor(rite: Rite, village: Village | undefined, contract: Contract |
 }
 
 /** The slash command a hunter opens its session with, which runs its rite's skill. */
-function openingOf(rite: Rite, village: Village | undefined, contract: Contract | undefined): string {
+function commandOf(rite: Rite, village: Village | undefined, contract: Contract | undefined): string {
   switch (rite) {
     case "implement-slice":
       return `/implement-slice ${village?.slices} ${contract?.id}`
@@ -156,6 +156,20 @@ function openingOf(rite: Rite, village: Village | undefined, contract: Contract 
     default:
       return `/${rite}`
   }
+}
+
+/**
+ * The first message a hunter is sent: its rite's slash command, and what the sender told it said
+ * after the command, as a user typing the two together would write them.
+ */
+function openingOf(
+  rite: Rite,
+  village: Village | undefined,
+  contract: Contract | undefined,
+  message: string | undefined,
+): string {
+  const command = commandOf(rite, village, contract)
+  return message ? `${command} ${message}` : command
 }
 
 type StreamMessage = {
@@ -489,7 +503,7 @@ export class Hunters {
 
     // A hunter back in this village or region makes way for the new one, and its name is free again.
     for (const returned of around) this.dismiss(returned.id)
-    const opening = openingOf(rite, village, contract)
+    const opening = openingOf(rite, village, contract, request.message)
     const hunter: Hunter = {
       id,
       name: this.freeName(),

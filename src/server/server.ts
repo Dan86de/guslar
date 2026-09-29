@@ -80,16 +80,19 @@ function readBody(req: IncomingMessage, max: number): Promise<string> {
 
 function parseTake(raw: unknown): TakeRequest | string {
   if (typeof raw !== "object" || raw === null) return "expected { slot, rite?, village?, contract?, permissionMode }"
-  const { slot, rite = "implement-slice", village, contract, permissionMode } = raw as Record<string, unknown>
+  const { slot, rite = "implement-slice", village, contract, permissionMode, message } = raw as Record<string, unknown>
   if (!isRegionSlot(slot)) return "slot must be a region slot"
   if (!isRite(rite)) return `rite must be one of ${RITES.join(", ")}`
   const ground = RITE_GROUND[rite]
   if (!isPermissionMode(permissionMode)) return "permissionMode must be default, acceptEdits, auto or bypassPermissions"
-  if (ground === "region") return { slot, rite, permissionMode }
+  if (message !== undefined && typeof message !== "string") return "message must be a string"
+  // A message of blank space is no message: the hunter rides out on its bare opening command.
+  const said = typeof message === "string" && message.trim() !== "" ? { message: message.trim() } : {}
+  if (ground === "region") return { slot, rite, permissionMode, ...said }
   if (typeof village !== "string" || village === "") return `village must be a slug for ${rite}`
-  if (ground === "village") return { slot, rite, village, permissionMode }
+  if (ground === "village") return { slot, rite, village, permissionMode, ...said }
   if (typeof contract !== "string" || contract === "") return `contract must be an id for ${rite}`
-  return { slot, rite, village, contract, permissionMode }
+  return { slot, rite, village, contract, permissionMode, ...said }
 }
 
 function parseHook(raw: unknown): HookRequest | undefined {

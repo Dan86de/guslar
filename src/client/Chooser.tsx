@@ -12,20 +12,28 @@ const MODES: { mode: PermissionMode; label: string; detail: string }[] = [
 /**
  * Asks how far the hunter may go without you, then sends it. Closing it sends nobody.
  * `heading` says what the hunter is sent for, and `title` what it is sent on.
+ *
+ * A rite the map cannot describe by itself passes `message`, and the chooser asks what to tell the
+ * hunter before it asks how far it may go. What is typed there goes with it as it rides out.
  */
 export function Chooser({
   heading,
   title,
+  message,
   onChoose,
   onClose,
 }: {
   heading: string
   title: string
-  onChoose: (mode: PermissionMode) => Promise<string | undefined>
+  /** What to call the field for the hunter's message, when the rite takes one. */
+  message?: { label: string; hint: string }
+  onChoose: (mode: PermissionMode, message: string) => Promise<string | undefined>
   onClose: () => void
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const headingId = useId()
+  const messageId = useId()
+  const [said, setSaid] = useState("")
   const [sending, setSending] = useState(false)
   const [problem, setProblem] = useState<string>()
 
@@ -34,10 +42,12 @@ export function Chooser({
     if (element && !element.open) element.showModal()
   }, [])
 
+  // A refusal leaves the dialog standing with what was typed still in it: a paragraph written for a
+  // hunter is not thrown away because the road to the server was cut.
   const choose = async (mode: PermissionMode) => {
     setSending(true)
     setProblem(undefined)
-    const refused = await onChoose(mode)
+    const refused = await onChoose(mode, said)
     setSending(false)
     if (refused) setProblem(refused)
     else dialog.current?.close()
@@ -59,6 +69,22 @@ export function Chooser({
         {heading}
       </h3>
       <p className="chooser-title">{title}</p>
+      {message && (
+        <>
+          <label className="chooser-ask chooser-said-label" htmlFor={messageId}>
+            {message.label}
+          </label>
+          <textarea
+            id={messageId}
+            className="chooser-said"
+            rows={3}
+            value={said}
+            disabled={sending}
+            onChange={(event) => setSaid(event.target.value)}
+          />
+          <p className="chooser-said-hint">{message.hint}</p>
+        </>
+      )}
       <p className="chooser-ask">How far may the hunter go without asking you?</p>
       <ul className="chooser-modes" aria-label="Permission modes">
         {MODES.map(({ mode, label, detail }) => (
