@@ -184,6 +184,8 @@ export type TakeRequest = {
   village?: string
   contract?: string
   permissionMode: PermissionMode
+  /** What the sender tells the hunter, said at the end of the rite's opening command. */
+  message?: string
 }
 
 /** What a map posts to `/api/hunters/<id>/replies` to write to a hunter in its journal. */

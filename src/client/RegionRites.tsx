@@ -9,6 +9,15 @@ const REGION_RITES: { rite: Rite; detail: string }[] = [
   { rite: "make-verify", detail: "A hunter sets how a kill in this region is proven." },
 ]
 
+/**
+ * What the chooser asks before it asks how far, on the one rite the map cannot describe by itself:
+ * the others are sent at a spec or a contract, an interview at nothing until you say so.
+ */
+const INTERVIEW_MESSAGE = {
+  label: "What shall the hunter ask you about?",
+  hint: "Leave it empty and it asks what the region needs.",
+}
+
 /** What the region's list says of the hunter sent on one of its rites: out on it, or how it came back. */
 function hunterLine(hunter: Hunter): string {
   switch (hunter.state) {
@@ -108,7 +117,8 @@ export function RegionRites({
           key={choosing}
           heading={`Send a hunter ${errandOf({ rite: choosing })}`}
           title={name}
-          onChoose={(permissionMode) => sendTake({ slot, rite: choosing, permissionMode })}
+          message={choosing === "interview" ? INTERVIEW_MESSAGE : undefined}
+          onChoose={(permissionMode, message) => sendTake({ slot, rite: choosing, permissionMode, message })}
           onClose={() => setChoosing(undefined)}
         />
       )}
