@@ -5,9 +5,6 @@ import huntingUrl from "../../art/hunter-hunting.png"
 import ridingUrl from "../../art/hunter-riding.png"
 import trophyUrl from "../../art/hunter-trophy.png"
 import woundedUrl from "../../art/hunter-wounded.png"
-import bountyUrl from "../../art/village-bounty.png"
-import clearedUrl from "../../art/village-cleared.png"
-import contractsUrl from "../../art/village-contracts.png"
 import type { RegionSlot, VillageStage, WorldState } from "../shared/world.js"
 import { pageTheme, THEME_ART } from "./art.js"
 import { outFor } from "./bound.js"
@@ -27,14 +24,7 @@ type Scene = {
   villageAspect: number
 }
 
-/** Each village stage's art, painted from one camera so they swap in place. */
-const STAGE_ART: Record<VillageStage, string> = {
-  "bounty-drafted": bountyUrl,
-  "contracts-posted": contractsUrl,
-  cleared: clearedUrl,
-}
-
-const STAGES = Object.keys(STAGE_ART) as VillageStage[]
+const STAGES: VillageStage[] = ["bounty-drafted", "contracts-posted", "cleared"]
 
 const POSE_ART: Record<Pose, string> = {
   riding: ridingUrl,
@@ -127,7 +117,7 @@ export function WorldMap({
         loadImage(art.map),
         loadImage(art.weather),
         loadImage(flareUrl),
-        ...STAGES.map((stage) => loadImage(STAGE_ART[stage])),
+        ...STAGES.map((stage) => loadImage(art.villages[stage])),
         ...POSES.map((pose) => loadImage(POSE_ART[pose])),
       ])
       const stageImages = images.slice(0, STAGES.length)

@@ -25,6 +25,17 @@
   --bone-lit: #f4f7f8;
 }
 
+/* A Vaillant heat pump's board is a site-office corkboard and its work orders clipped sheets, painted
+   to the same boxes as Guslar's, so only the art swaps; the card's seal crops the sheet's teal sticker. */
+:root[data-theme="vaillant"] .board-art {
+  background-image: url("../../art/vaillant/job-board.png");
+}
+
+:root[data-theme="vaillant"] .card,
+:root[data-theme="vaillant"] .card-seal {
+  background-image: url("../../art/vaillant/work-order.png");
+}
+
 * {
   box-sizing: border-box;
 }

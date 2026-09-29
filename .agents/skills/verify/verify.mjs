@@ -31,6 +31,10 @@ class Refusal extends Error {}
 
 let transcript
 let printed = ""
+// A reader that stops early, like `| head`, closes stdout: the call still runs and is still logged.
+process.stdout.on("error", (error) => {
+  if (error.code !== "EPIPE") throw error
+})
 function out(line = "") {
   printed += `${line}\n`
   process.stdout.write(`${line}\n`)

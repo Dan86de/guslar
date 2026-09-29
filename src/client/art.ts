@@ -1,8 +1,14 @@
 import fogUrl from "../../art/fog.png"
 import frostUrl from "../../art/vaillant/frost.png"
+import deliveredUrl from "../../art/vaillant/heatpump-delivered.png"
+import installingUrl from "../../art/vaillant/heatpump-installing.png"
+import runningUrl from "../../art/vaillant/heatpump-running.png"
 import vaillantMapUrl from "../../art/vaillant/world-map.png"
+import bountyUrl from "../../art/village-bounty.png"
+import clearedUrl from "../../art/village-cleared.png"
+import contractsUrl from "../../art/village-contracts.png"
 import mapUrl from "../../art/world-map.png"
-import type { RegionSlot } from "../shared/world.js"
+import type { RegionSlot, VillageStage } from "../shared/world.js"
 import type { Ellipse } from "./geometry.js"
 import { DEFAULT_THEME, isTheme, type Theme } from "../shared/theme.js"
 
@@ -26,6 +32,8 @@ export type ThemeArt = {
   veil: { heart: Rgb; rim: Rgb; reach?: Partial<Record<RegionSlot, Ellipse>> }
   /** The colour the weather's hatching is laid on the veil in. */
   ink: Rgb
+  /** Each village stage's art, painted from one camera so they swap in place. */
+  villages: Record<VillageStage, string>
 }
 
 /**
@@ -39,6 +47,7 @@ export const THEME_ART: Record<Theme, ThemeArt> = {
     weather: fogUrl,
     veil: { heart: [212, 201, 169], rim: [169, 169, 156] },
     ink: [0, 0, 0],
+    villages: { "bounty-drafted": bountyUrl, "contracts-posted": contractsUrl, cleared: clearedUrl },
   },
   vaillant: {
     map: vaillantMapUrl,
@@ -55,6 +64,8 @@ export const THEME_ART: Record<Theme, ThemeArt> = {
       },
     },
     ink: [58, 64, 96],
+    // A heat pump crated on its pallet, then with its panel off and hoses run, then running.
+    villages: { "bounty-drafted": deliveredUrl, "contracts-posted": installingUrl, cleared: runningUrl },
   },
 }
 
