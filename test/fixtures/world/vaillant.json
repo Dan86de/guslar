@@ -1,0 +1,7 @@
+{
+  "theme": "vaillant",
+  "regions": [
+    { "slot": "forest", "repo": "./repos/bogwater", "name": "Bogwater Reach" },
+    { "slot": "river-town", "repo": "~/github/kettle" }
+  ]
+}

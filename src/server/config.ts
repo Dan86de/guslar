@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import path from "node:path"
+import { DEFAULT_THEME, isTheme, THEMES } from "../shared/theme.js"
 import { isRegionSlot, REGION_SLOTS, type World } from "../shared/world.js"
 
 export class WorldConfigError extends Error {}
@@ -10,7 +11,8 @@ export function defaultWorldPath(): string {
 }
 
 /**
- * Reads and validates world.json. A missing file is an empty world, all fog.
+ * Reads and validates world.json. A missing file is an empty world, all fog, and a world that names
+ * no theme is drawn as Guslar.
  * Repo paths are made absolute: `~` is the home directory, relative paths start at world.json's folder.
  */
 export async function loadWorld(file: string): Promise<World> {
@@ -18,7 +20,7 @@ export async function loadWorld(file: string): Promise<World> {
   try {
     text = await readFile(file, "utf8")
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { regions: [] }
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return { theme: DEFAULT_THEME, regions: [] }
     throw error
   }
 
@@ -40,6 +42,9 @@ function parseWorld(raw: unknown, baseDir: string, file: string): World {
     fail(`expected { "regions": [...] }`)
   }
 
+  const { theme = DEFAULT_THEME } = raw as { theme?: unknown }
+  if (!isTheme(theme)) return fail(`theme must be one of ${THEMES.join(", ")}`)
+
   const seen = new Set<string>()
   const regions = (raw as { regions: unknown[] }).regions.map((entry, index) => {
     const where = `regions[${index}]`
@@ -58,7 +63,7 @@ function parseWorld(raw: unknown, baseDir: string, file: string): World {
     return { slot, repo: resolveRepo(repo, baseDir), ...(name === undefined ? {} : { name }) }
   })
 
-  return { regions }
+  return { theme, regions }
 }
 
 function resolveRepo(repo: string, baseDir: string): string {

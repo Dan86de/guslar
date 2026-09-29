@@ -1,10 +1,11 @@
-import { existsSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 import type { AddressInfo, Socket } from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import sirv from "sirv"
 import { WebSocketServer, type WebSocket } from "ws"
+import { THEME_TABS, type Theme } from "../shared/theme.js"
 import {
   type HookReply,
   type HookRequest,
@@ -58,6 +59,21 @@ function clientDir(): string {
     dir = parent
   }
   return path.join(dir, "dist", "client")
+}
+
+/**
+ * The built map's page, with the theme's title and icon in place of Guslar's, so a browser tab
+ * shows which world it is before the map has loaded.
+ */
+function pageOf(dir: string, theme: Theme): string {
+  const page = readFileSync(path.join(dir, "index.html"), "utf8")
+  const { title, icon } = THEME_TABS[theme]
+  const TITLE = /<title>[^<]*<\/title>/
+  const ICON = /<link rel="icon"[^>]*>/
+  if (!TITLE.test(page) || !ICON.test(page)) throw new Error("guslar: its built page has no title or icon to theme")
+  return page
+    .replace(TITLE, `<title>${title}</title>`)
+    .replace(ICON, `<link rel="icon" type="${icon.type}" href="${icon.href}" />`)
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -120,16 +136,19 @@ function parseReply(raw: unknown): string | undefined {
 }
 
 export async function startServer(options: {
+  theme: Theme
   slots: SlotState[]
   hunters: Hunters
   host: string
   port: number
 }): Promise<GuslarServer> {
   let slots = options.slots
-  const { hunters } = options
-  const world = (): WorldState => ({ slots, hunters: hunters.list() })
+  const { hunters, theme } = options
+  const world = (): WorldState => ({ theme, slots, hunters: hunters.list() })
   const dir = clientDir()
-  const serveClient = existsSync(dir) ? sirv(dir, { single: true, etag: true }) : undefined
+  const built = existsSync(dir)
+  const serveClient = built ? sirv(dir, { etag: true }) : undefined
+  const page = built ? pageOf(dir, theme) : undefined
   const host = options.host.includes(":") ? `[${options.host}]` : options.host
   let port = 0
 
@@ -333,8 +352,15 @@ export async function startServer(options: {
       res.end()
       return
     }
-    if (serveClient) {
-      serveClient(req, res)
+    if (serveClient && page !== undefined) {
+      // The map is one page: every path that is not one of its files gets it, in this world's theme.
+      const sendPage = () => {
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" })
+        res.end(req.method === "HEAD" ? undefined : page)
+      }
+      const { pathname } = new URL(req.url ?? "/", "http://guslar")
+      if (pathname === "/" || pathname === "/index.html") sendPage()
+      else serveClient(req, res, sendPage)
       return
     }
     res.writeHead(503, { "content-type": "text/plain" })

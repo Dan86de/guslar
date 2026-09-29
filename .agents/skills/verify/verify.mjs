@@ -339,6 +339,8 @@ const commands = {
       const res = await page.goto(url, { waitUntil: "load" })
       out(`opened ${url}: HTTP ${res?.status()}`)
       out(`title: ${await page.title()}`)
+      const icon = await page.locator('link[rel="icon"]').first().getAttribute("href", { timeout: 1000 }).catch(() => null)
+      out(`icon: ${icon === null ? "(none)" : new URL(icon, url).pathname}`)
       // The map is ready when its region list renders and the map stops being busy.
       await page.locator('.map[aria-busy="false"]').waitFor({ timeout: 15000 }).catch(() => {})
       await page.waitForTimeout(1000)
@@ -430,10 +432,25 @@ const commands = {
   async http(flags, [target]) {
     const run = runDir(flags)
     const state = readState(run)
+    if (flags.save !== undefined && !/^[\w-]+(\.[\w]+)?$/.test(flags.save)) {
+      throw new Refusal(`invalid file name "${flags.save}": use letters, digits, - and _, and one extension`)
+    }
     const res = await fetch(ownUrl(state, target))
-    const body = await res.text()
-    out(`HTTP ${res.status} ${res.headers.get("content-type") ?? ""}`)
-    out(body.length > 4000 ? `${body.slice(0, 4000)}\n… (${body.length} bytes)` : body)
+    const type = res.headers.get("content-type") ?? ""
+    const bytes = Buffer.from(await res.arrayBuffer())
+    out(`HTTP ${res.status} ${type}`)
+    // Text is printed; anything else, like an image, only by its size, and saved to be looked at.
+    if (/^(text\/|application\/json|image\/svg\+xml)/.test(type)) {
+      const body = bytes.toString("utf8")
+      out(body.length > 4000 ? `${body.slice(0, 4000)}\n… (${body.length} bytes)` : body)
+    } else {
+      out(`(${bytes.length} bytes of ${type || "unknown type"})`)
+    }
+    if (flags.save !== undefined) {
+      const file = path.join(run, flags.save)
+      writeFileSync(file, bytes)
+      out(`saved ${path.relative(ROOT, file)}`)
+    }
   },
 
   async guslar(flags, args) {
@@ -789,7 +806,7 @@ function parse(argv) {
   const passthrough = name === "guslar" || name === "git"
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i]
-    if (arg === "--run" || (name === "guslar" && arg === "--env") || (!passthrough && ["--world", "--timeout", "--size", "--signal", "--clip", "--zoom"].includes(arg))) {
+    if (arg === "--run" || (name === "guslar" && arg === "--env") || (!passthrough && ["--world", "--timeout", "--size", "--signal", "--clip", "--zoom", "--save"].includes(arg))) {
       flags[arg.slice(2)] = rest[++i]
     } else if (!passthrough && arg === "--gone") {
       flags.gone = true

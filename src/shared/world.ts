@@ -1,9 +1,11 @@
+import type { Theme } from "./theme.js"
+
 export const REGION_SLOTS = ["forest", "marsh", "mountains", "river-town", "mines", "ruins"] as const
 
 export type RegionSlot = (typeof REGION_SLOTS)[number]
 
-/** The user's world.json: which repo sits in which painted slot. */
-export type World = { regions: { slot: RegionSlot; repo: string; name?: string }[] }
+/** The user's world.json: how the world is drawn, and which repo sits in which painted slot. */
+export type World = { theme: Theme; regions: { slot: RegionSlot; repo: string; name?: string }[] }
 
 export type Autonomy = "afk" | "hitl"
 
@@ -172,7 +174,7 @@ export type PermissionAnswer = { behavior: "allow" } | { behavior: "deny"; messa
 export type HookSighting = { event: string; tool?: string }
 
 /** What the server broadcasts to every open map. Slots are always in REGION_SLOTS order. */
-export type WorldState = { slots: SlotState[]; hunters: Hunter[] }
+export type WorldState = { theme: Theme; slots: SlotState[]; hunters: Hunter[] }
 
 /**
  * What a map posts to `/api/hunters` to send a hunter: on a ready contract when it names no rite,

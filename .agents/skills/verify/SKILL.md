@@ -63,7 +63,7 @@ What the run gets, all inside the run folder:
 
 Start options:
 
-- `--world <file>`: copy that world file into the run instead of the default. Every repo in it must resolve inside the run folder, or start refuses.
+- `--world <file>`: copy that world file into the run instead of the default. Every repo in it must resolve inside the run folder, or start refuses. [docs/manual/worlds/](../../../docs/manual/worlds/) holds the world files the manual starts runs with, such as `vaillant.json`.
 - `--world none`: start with no world file, so Guslar reads the run's own `home/.guslar/world.json`, which does not exist.
 
 What a run cannot reach, and so refuses:
@@ -92,12 +92,12 @@ Unfit because the build is stale means your edit is not in the running product: 
 
 | Command | What it does and prints |
 |---|---|
-| `open [path]` | Loads a page of this run in the browser and waits for the map to paint. Prints `opened <url>: HTTP <status>`, `title: …`, `map busy: false` once painted, `console:` with each console message or `(nothing)`, then `page:` and the accessibility tree. |
+| `open [path]` | Loads a page of this run in the browser and waits for the map to paint. Prints `opened <url>: HTTP <status>`, `title: …`, `icon: <path>` with the path of the page's tab icon, `map busy: false` once painted, `console:` with each console message or `(nothing)`, then `page:` and the accessibility tree. |
 | `snapshot` | Prints `url: …` and the current page's accessibility tree, without reloading. |
 | `wait-for <text> [--gone] [--timeout ms]` | Waits up to 15 s (or `--timeout`) for text to appear on the page, or with `--gone` to leave it. Prints `"<text>" is visible after <n> ms` or `"<text>" is gone after <n> ms`, and exits 1 if it did not happen. |
 | `screenshot <name> [--size WxH] [--clip x,y,w,h [--zoom n]]` | Saves `<name>.png` in the run folder (names use letters, digits, `-` and `_`) and prints `saved <file> (<W>x<H>)`. `--size` changes the run's viewport for this and every later command; a screenshot with `--size 1440x900` puts back the default. `--clip` saves only that part of the page, in page pixels, and `--zoom` (1 to 4) renders it magnified, for a close look at a detail; it prints `saved <file> (<W>x<H>: <w>x<h> at <x>,<y>, zoom <n>)`. Crops are evidence too, so take them this way rather than cropping a file yourself. Zoom 4 is as close as the art goes: its own resolution is the limit, and a larger `--size` shows nothing more. |
-| `world` | Connects to `/ws` as a map does and prints the first message, pretty-printed JSON shaped `{"type": "world", "world": {"slots": [...], "hunters": [...]}}`. |
-| `http <path>` | GETs a path of this run's Guslar and prints `HTTP <status> <content type>`, then the body. |
+| `world` | Connects to `/ws` as a map does and prints the first message, pretty-printed JSON shaped `{"type": "world", "world": {"theme": "…", "slots": [...], "hunters": [...]}}`. |
+| `http <path> [--save <file>]` | GETs a path of this run's Guslar and prints `HTTP <status> <content type>`, then the body when it is text (JSON and SVG included), or `(<n> bytes of <content type>)` when it is not, like a PNG. `--save` also writes the body to `<file>` in the run folder (letters, digits, `-` and `_`, and one extension) and prints `saved <file>`, so an image it served can be opened and looked at. |
 | `guslar [--env GUSLAR_WORLD=<file>] [args…]` | Runs a one-off `guslar --port 0 --no-open [args…]` in the run folder with the run's environment; your args come last and override those defaults. When the first arg is a command, like `hooks install`, it runs `guslar [args…]` as given, since a command starts no server. It does not get the run's `world.json`: without `--world` or `GUSLAR_WORLD` it reads `home/.guslar/world.json`. It never opens a browser, so `browser.log` does not change. It prints `one-off guslar pid <n>`, what Guslar printed, then either `guslar exited by itself: <code>`, or `it started; world served at /api/world: <json>` and `stopped it`, and last `pid <n> has ended`. |
 | `click <name>` | Clicks the one button whose accessible name contains `<name>`, as a user clicking it, and prints `clicked button "<full name>"`. With none or several matching, it says so, lists every button's name, and exits 1. |
 | `fill <name> <text>` | Clicks the one text box whose accessible name contains `<name>`, empties it if it holds anything, and types `<text>` into it key by key, as a user does, then prints `filled text box "<full name>" with: <text>`. With none or several matching, it says so, lists every text box's name, and exits 1. |
@@ -114,6 +114,7 @@ Unfit because the build is stale means your edit is not in the running product: 
 
 Handles to use:
 
+- On the tab: the `title:` and `icon:` lines `open` prints. A world with no `theme`, or `"theme": "guslar"`, has `title: Guslar` and `icon: /favicon.svg`; a Vaillant world, `title: Guslar · Vaillant` and `icon: /vaillant/favicon.png`.
 - On the page: the heading `Guslar`, the list named `Regions`, and its six items in slot order.
   A region item reads `<name> , <slot name>` and a fogged one `Unclaimed <slot name>, under fog`, where the slot name is the slot with its hyphen as a space (`river town`).
   When the server is gone there is a status `The road to the server is cut. Reconnecting…`.
