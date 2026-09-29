@@ -65,7 +65,16 @@ export class HunterLayer {
   private readonly aspect: number
   private clock = 0
 
-  constructor(poseImages: HTMLImageElement[], flareImage: HTMLImageElement, ticker: Ticker) {
+  /**
+   * `flareHeight` is how tall the flare stands as a share of its figure's height, since each
+   * theme's flare carries its signal at a different height on its post.
+   */
+  constructor(
+    poseImages: HTMLImageElement[],
+    flareImage: HTMLImageElement,
+    private readonly flareHeight: number,
+    ticker: Ticker,
+  ) {
     const cutouts = cutOutAll(poseImages)
     this.poses = new Map(POSES.map((pose, index) => [pose, texture(cutouts[index] ?? document.createElement("canvas"))]))
     const first = cutouts[0]
@@ -125,11 +134,12 @@ export class HunterLayer {
     // Pixi's width setter keeps the sign scale.x had, so set the size, then the side it faces.
     sprite.width = height * this.aspect
     sprite.scale.x = Math.abs(sprite.scale.x) * figure.facing
-    const flareHeight = height * 0.7
+    const flareHeight = height * this.flareHeight
     flare.height = flareHeight
     flare.width = flareHeight * this.flareAspect
-    // Planted just behind the hunter, so its pennant flies beside the hunter's head.
-    flare.position.set(x - height * this.aspect * 0.3, y - height * 0.14)
+    // Planted just behind the hunter, on the side it faces away from, so its pennant flies beside the
+    // hunter's head and never covers its hands.
+    flare.position.set(x - figure.facing * height * this.aspect * 0.45, y - height * 0.14)
     // The pennant stirs in the wind so the eye finds it.
     flare.skew.x = Math.sin(this.clock / 260) * 0.05
   }

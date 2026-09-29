@@ -36,6 +36,13 @@
   background-image: url("../../art/vaillant/work-order.png");
 }
 
+/* What waits on you is a red fault light, planted upright where Guslar's pennant leans. */
+:root[data-theme="vaillant"] .card-flare,
+:root[data-theme="vaillant"] .petition-flare {
+  background-image: url("../../art/vaillant/fault-light.png");
+  transform: none;
+}
+
 * {
   box-sizing: border-box;
 }

@@ -1,17 +1,12 @@
 import { Application, BlurFilter, CanvasSource, ColorMatrixFilter, Container, Sprite, Texture } from "pixi.js"
 import { useEffect, useRef, useState } from "react"
-import flareUrl from "../../art/awaiting-flare.png"
-import huntingUrl from "../../art/hunter-hunting.png"
-import ridingUrl from "../../art/hunter-riding.png"
-import trophyUrl from "../../art/hunter-trophy.png"
-import woundedUrl from "../../art/hunter-wounded.png"
 import type { RegionSlot, VillageStage, WorldState } from "../shared/world.js"
 import { pageTheme, THEME_ART } from "./art.js"
 import { outFor } from "./bound.js"
 import { cutOutAll } from "./cutout.js"
 import { featheredMap, FogLayer } from "./fog.js"
 import { fitMap, hunterGround, labelAnchor, MAP_SIZE, regionGround, villageSpots, type View } from "./geometry.js"
-import { HunterLayer, isOut, POSES, RIDE_MS, type HunterPlace, type Pose } from "./hunters.js"
+import { HunterLayer, isOut, POSES, RIDE_MS, type HunterPlace } from "./hunters.js"
 import { token } from "./tokens.js"
 import { REVEAL_MS, REVEAL_STEP_MS, revealProgress } from "./reveal.js"
 import { WeatherLayer } from "./weather.js"
@@ -25,13 +20,6 @@ type Scene = {
 }
 
 const STAGES: VillageStage[] = ["bounty-drafted", "contracts-posted", "cleared"]
-
-const POSE_ART: Record<Pose, string> = {
-  riding: ridingUrl,
-  hunting: huntingUrl,
-  wounded: woundedUrl,
-  trophy: trophyUrl,
-}
 
 /**
  * Where every hunter in the world stands on the map: beside its village, or by its region's plaque
@@ -116,9 +104,9 @@ export function WorldMap({
         }),
         loadImage(art.map),
         loadImage(art.weather),
-        loadImage(flareUrl),
+        loadImage(art.flare.art),
         ...STAGES.map((stage) => loadImage(art.villages[stage])),
-        ...POSES.map((pose) => loadImage(POSE_ART[pose])),
+        ...POSES.map((pose) => loadImage(art.poses[pose])),
       ])
       const stageImages = images.slice(0, STAGES.length)
       const poseImages = images.slice(STAGES.length)
@@ -172,7 +160,7 @@ export function WorldMap({
 
       // Hunters stand over the fog: they only ride in claimed regions, and one hunting at the
       // edge of its region must not fade into a neighbour's fog rim.
-      const hunters = new HunterLayer(poseImages, flareImage, app.ticker)
+      const hunters = new HunterLayer(poseImages, flareImage, art.flare.height, app.ticker)
       board.addChild(hunters.container)
       app.stage.addChild(board)
       element.appendChild(app.canvas)
