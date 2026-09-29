@@ -2,7 +2,7 @@ import { readFileSync, realpathSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import WebSocket from "ws"
 import { afterEach, describe, expect, it } from "vitest"
-import type { Hunter, TakeRequest, TerminalOutput, WorldState } from "../src/shared/world.js"
+import type { Hunter, Refusal, TakeRequest, TerminalOutput, WorldState } from "../src/shared/world.js"
 import { bogwater } from "./fixture-region.js"
 import { awaitWorld, fixtures, receiveWorld, startGuslar, tempDir, waitFor, type Running } from "./guslar.js"
 
@@ -33,13 +33,13 @@ async function post(
   where: string,
   body: unknown,
   origin = new URL(guslar.url).origin,
-): Promise<{ status: number; body: { hunter?: Hunter; error?: string } }> {
+): Promise<{ status: number; body: { hunter?: Hunter; refusal?: Refusal } }> {
   const res = await fetch(new URL(where, guslar.url), {
     method: "POST",
     headers: { "content-type": "application/json", origin },
     body: JSON.stringify(body),
   })
-  return { status: res.status, body: (await res.json()) as { hunter?: Hunter; error?: string } }
+  return { status: res.status, body: (await res.json()) as { hunter?: Hunter; refusal?: Refusal } }
 }
 
 /** A map's view of a hunter's terminal: everything it was sent, and a way to type into it. */
@@ -89,7 +89,7 @@ describe("open in terminal", () => {
     guslar = running
     await receiveWorld(running.url)
     const { body } = await post(running, "/api/hunters", S3)
-    if (!body.hunter) throw new Error(`no hunter was sent: ${body.error}`)
+    if (!body.hunter) throw new Error(`no hunter was sent: ${JSON.stringify(body.refusal)}`)
     return { running, repo, hunter: body.hunter }
   }
 
@@ -169,7 +169,7 @@ describe("open in terminal", () => {
     const elsewhere = await post(running, `/api/hunters/${hunter.id}/terminal`, {}, "http://evil.example")
     expect(elsewhere.status).toBe(403)
     const nobody = await post(running, "/api/hunters/00000000-0000-4000-8000-000000000000/terminal", {})
-    expect(nobody).toEqual({ status: 404, body: { error: "No such hunter is out." } })
+    expect(nobody).toEqual({ status: 404, body: { refusal: { reason: "no-hunter" } } })
     expect(recorded(running).filter((entry) => entry.tty)).toHaveLength(0)
 
     await post(running, `/api/hunters/${hunter.id}/terminal`, {})

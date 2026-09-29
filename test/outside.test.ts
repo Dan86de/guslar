@@ -81,14 +81,14 @@ describe("a session started outside Guslar", () => {
     })
     expect([reply.status, await reply.json()]).toEqual([
       409,
-      { error: "Wojmir was started outside Guslar: write to it in its own terminal." },
+      { refusal: { reason: "outside", hunter: "Wojmir" } },
     ])
     const terminal = await fetch(new URL(`/api/hunters/${hunter?.id}/terminal`, running.url), {
       method: "POST",
       headers: origin,
       body: "{}",
     })
-    expect(terminal.status).toBe(409)
+    expect([terminal.status, await terminal.json()]).toEqual([409, { refusal: { reason: "outside", hunter: "Wojmir" } }])
   })
 
   it("is not seen from a folder no region holds, nor as a hunter's own session resumed", async () => {
@@ -142,7 +142,7 @@ describe("a session started outside Guslar", () => {
     })
     expect([refused.status, await refused.json()]).toEqual([
       409,
-      { error: "Drain the bog refuses a second hunter: Wojmir is out on S3." },
+      { refusal: { reason: "busy", place: "Drain the bog", holder: { name: "Wojmir", rite: "implement-slice", contract: "S3" } } },
     ])
 
     const awaiting = at((h) => h.state === "awaiting-you")

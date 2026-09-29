@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
-import type { Hunter, JournalEntry, TakeRequest } from "../src/shared/world.js"
+import type { Hunter, JournalEntry, Refusal, TakeRequest } from "../src/shared/world.js"
 import { bogwater } from "./fixture-region.js"
 import { awaitWorld, fixtures, receiveWorld, startGuslar, tempDir, waitFor, type Running } from "./guslar.js"
 
@@ -23,13 +23,13 @@ const CUT_SHORT: JournalEntry = {
   error: true,
 }
 
-async function post(guslar: Running, where: string, body: unknown): Promise<{ status: number; body: { hunter?: Hunter; error?: string } }> {
+async function post(guslar: Running, where: string, body: unknown): Promise<{ status: number; body: { hunter?: Hunter; refusal?: Refusal } }> {
   const res = await fetch(new URL(where, guslar.url), {
     method: "POST",
     headers: { "content-type": "application/json", origin: new URL(guslar.url).origin },
     body: JSON.stringify(body),
   })
-  return { status: res.status, body: (await res.json()) as { hunter?: Hunter; error?: string } }
+  return { status: res.status, body: (await res.json()) as { hunter?: Hunter; refusal?: Refusal } }
 }
 
 type Logged = { pid: number; started?: { args: string[]; hunterId?: string }; stdin?: string }

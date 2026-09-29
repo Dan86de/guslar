@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from "node:util"
 import path from "node:path"
 import { REGION_SLOTS, type ContractState, type RegionSlot, type SlotState, type World } from "../shared/world.js"
+import { REGION_NAMES } from "../shared/theme.js"
 import { RegionReader } from "./region.js"
 
 /** How often the repos are read again, so the map follows what the skills write. */
@@ -23,7 +24,7 @@ export class WorldReader {
         return {
           slot,
           kind: "region",
-          name: region.name ?? path.basename(region.repo),
+          name: region.name ?? REGION_NAMES[this.world.theme]?.[slot] ?? path.basename(region.repo),
           repo: region.repo,
           villages: await reader.villages(),
         }

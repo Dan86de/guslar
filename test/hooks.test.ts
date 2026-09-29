@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
-import type { Hunter, TakeRequest } from "../src/shared/world.js"
+import type { Hunter, Refusal, TakeRequest } from "../src/shared/world.js"
 import { bogwater, fixtureRegion, type FixtureRegion } from "./fixture-region.js"
 import { awaitWorld, fixtures, receiveWorld, runGuslar, startGuslar, tempDir, waitFor, type Running } from "./guslar.js"
 
@@ -205,8 +205,8 @@ describe("a hook event from a hunter's session", () => {
       headers: { "content-type": "application/json", origin: new URL(running.url).origin },
       body: JSON.stringify(S3),
     })
-    const body = (await res.json()) as { hunter?: Hunter; error?: string }
-    if (!body.hunter) throw new Error(`no hunter: ${body.error}`)
+    const body = (await res.json()) as { hunter?: Hunter; refusal?: Refusal }
+    if (!body.hunter) throw new Error(`no hunter: ${JSON.stringify(body.refusal)}`)
     return body.hunter
   }
 

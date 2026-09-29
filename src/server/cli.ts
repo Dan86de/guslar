@@ -110,13 +110,14 @@ async function main(): Promise<void> {
       hunter.village === undefined || hunter.contract === undefined
         ? Promise.resolve(undefined)
         : reader.contract(hunter.slot, hunter.village, hunter.contract),
+    world.theme,
     path.join(path.dirname(path.resolve(worldFile)), "hunters.json"),
   )
   hunters.restore(initial)
 
   let server
   try {
-    server = await startServer({ slots: initial, hunters, host: values.host, port })
+    server = await startServer({ theme: world.theme, slots: initial, hunters, host: values.host, port })
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EADDRINUSE") {
       throw new WorldConfigError(`port ${port} is taken. Is Guslar already running? Pick another with --port.`)

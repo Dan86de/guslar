@@ -2,7 +2,7 @@ import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs"
 import { request } from "node:http"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
-import type { Hunter, TakeRequest, WorldState } from "../src/shared/world.js"
+import type { Hunter, Refusal, TakeRequest, WorldState } from "../src/shared/world.js"
 import { bogwater, fixtureRegion } from "./fixture-region.js"
 import { awaitWorld, receiveWorld, startGuslar, tempDir, waitFor, type Running } from "./guslar.js"
 
@@ -23,13 +23,13 @@ function claudeEvents(guslar: Running): ClaudeEvent[] {
 }
 
 /** Takes a contract the way the map does: a JSON POST from the server's own origin. */
-async function take(guslar: Running, request: TakeRequest): Promise<{ status: number; body: { hunter?: Hunter; error?: string } }> {
+async function take(guslar: Running, request: TakeRequest): Promise<{ status: number; body: { hunter?: Hunter; refusal?: Refusal } }> {
   const res = await fetch(new URL("/api/hunters", guslar.url), {
     method: "POST",
     headers: { "content-type": "application/json", origin: new URL(guslar.url).origin },
     body: JSON.stringify(request),
   })
-  return { status: res.status, body: (await res.json()) as { hunter?: Hunter; error?: string } }
+  return { status: res.status, body: (await res.json()) as { hunter?: Hunter; refusal?: Refusal } }
 }
 
 const S3: TakeRequest = { slot: "forest", village: "drain-the-bog", contract: "S3", permissionMode: "acceptEdits" }
@@ -49,7 +49,7 @@ describe("sending a hunter on a ready contract", () => {
     const { status, body } = await take(guslar, S3)
     expect(status).toBe(201)
     const hunter = body.hunter
-    if (!hunter) throw new Error(`no hunter: ${body.error}`)
+    if (!hunter) throw new Error(`no hunter: ${JSON.stringify(body.refusal)}`)
 
     const running = guslar
     const events = await waitFor(() => {
@@ -125,7 +125,7 @@ describe("sending a hunter on a ready contract", () => {
     for (const contract of ["S5", "S3"]) {
       expect(await take(guslar, { ...S3, contract, permissionMode: "default" })).toEqual({
         status: 409,
-        body: { error: "Drain the bog refuses a second hunter: Wojmir is out on S3." },
+        body: { refusal: { reason: "busy", place: "Drain the bog", holder: { name: "Wojmir", rite: "implement-slice", contract: "S3" } } },
       })
     }
 
@@ -164,13 +164,28 @@ describe("sending a hunter on a ready contract", () => {
 
     expect(await take(guslar, { ...S3, contract: "S4" })).toEqual({
       status: 409,
-      body: { error: "S4 of Drain the bog is sealed, not ready to take." },
+      body: { refusal: { reason: "not-ready", village: "Drain the bog", contract: "S4", state: "sealed" } },
     })
     expect(await take(guslar, { ...S3, contract: "S1" })).toEqual({
       status: 409,
-      body: { error: "S1 of Drain the bog is done, not ready to take." },
+      body: { refusal: { reason: "not-ready", village: "Drain the bog", contract: "S1", state: "done" } },
     })
-    expect((await take(guslar, { ...S3, village: "ward-the-well", contract: "S1" })).status).toBe(404)
+    expect(await take(guslar, { ...S3, village: "ward-the-well", contract: "S1" })).toEqual({
+      status: 404,
+      body: { refusal: { reason: "no-contract", village: "Ward the well", contract: "S1" } },
+    })
+    expect(await take(guslar, { ...S3, contract: "S9" })).toEqual({
+      status: 404,
+      body: { refusal: { reason: "no-contract", village: "Drain the bog", contract: "S9" } },
+    })
+    expect(await take(guslar, { ...S3, village: "no-such" })).toMatchObject({
+      status: 404,
+      body: { refusal: { reason: "no-village", village: "no-such" } },
+    })
+    expect(await take(guslar, { ...S3, slot: "marsh" })).toEqual({
+      status: 404,
+      body: { refusal: { reason: "no-region", slot: "marsh" } },
+    })
     expect((await take(guslar, { ...S3, permissionMode: "yolo" as TakeRequest["permissionMode"] })).status).toBe(400)
     expect(claudeEvents(guslar)).toEqual([])
     expect((await receiveWorld(guslar.url)).hunters).toEqual([])
@@ -229,7 +244,13 @@ describe("sending a hunter on a ready contract", () => {
 
     const { status, body } = await take(guslar, S3)
     expect(status).toBe(502)
-    expect(body.error).toMatch(/^Could not start .*no-such-claude: spawn .* ENOENT$/)
+    expect(body).toEqual({
+      refusal: {
+        reason: "cannot-start",
+        program: path.join(home, "no-such-claude"),
+        problem: expect.stringMatching(/^spawn .*no-such-claude ENOENT$/) as unknown,
+      },
+    })
     expect((await receiveWorld(guslar.url)).hunters).toEqual([])
   })
 })

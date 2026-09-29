@@ -1,10 +1,11 @@
-import { errandOf, RITE_NAMES, type Hunter, type WorldState } from "../shared/world.js"
+import type { Hunter, WorldState } from "../shared/world.js"
+import type { Words } from "./words/index.js"
 
 /**
  * What a hunter is bound to, as its journal and its petitions say it: `what` it was sent for (its
  * contract with the contract's title, or its rite) and `where` (its village, or its region).
  */
-export function boundOf(world: WorldState, hunter: Hunter): { what: string; where: string } {
+export function boundOf(words: Words, world: WorldState, hunter: Hunter): { what: string; where: string } {
   const region = world.slots.find((slot) => slot.slot === hunter.slot)
   const regionName = region?.kind === "region" ? region.name : hunter.slot
   const village =
@@ -16,13 +17,13 @@ export function boundOf(world: WorldState, hunter: Hunter): { what: string; wher
   const contract = `${hunter.contract ?? ""}${title ? ` ${title}` : ""}`
   switch (hunter.rite) {
     case undefined:
-      return { what: "A session started outside Guslar", where }
+      return { what: words.bound.outside, where }
     case "implement-slice":
       return { what: contract, where }
     case "sign-off":
-      return { what: `${RITE_NAMES[hunter.rite]} of ${contract}`, where }
+      return { what: words.bound.signOff(contract), where }
     default:
-      return { what: RITE_NAMES[hunter.rite], where }
+      return { what: words.rites.names[hunter.rite], where }
   }
 }
 
@@ -32,12 +33,13 @@ export function boundOf(world: WorldState, hunter: Hunter): { what: string; wher
  * villagers in Bogwater Reach` for a rite. A session started outside Guslar says so after it:
  * ` in Bogwater Reach, started outside Guslar` until it is seen on a contract.
  */
-export function outFor(world: WorldState, hunter: Hunter): string {
-  const { where } = boundOf(world, hunter)
+export function outFor(words: Words, world: WorldState, hunter: Hunter): string {
+  const { where } = boundOf(words, world, hunter)
   if (hunter.outside) {
-    const errand = hunter.rite === undefined ? ` in ${where}` : ` ${errandOf(hunter)} of ${where}`
-    return `${errand}, started outside Guslar`
+    const place =
+      hunter.rite === undefined ? words.bound.outsideIn(where) : words.bound.hunt(words.hunter.errand(hunter), where)
+    return `${place}${words.bound.outsideSuffix}`
   }
-  if (hunter.rite === "implement-slice") return ` ${errandOf(hunter)} of ${where}`
-  return `, sent ${errandOf(hunter)} ${hunter.village === undefined ? "in" : "for"} ${where}`
+  if (hunter.rite === "implement-slice") return words.bound.hunt(words.hunter.errand(hunter), where)
+  return words.bound.sent(words.hunter.errand(hunter), where, hunter.village === undefined)
 }

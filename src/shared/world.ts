@@ -1,9 +1,11 @@
+import type { Theme } from "./theme.js"
+
 export const REGION_SLOTS = ["forest", "marsh", "mountains", "river-town", "mines", "ruins"] as const
 
 export type RegionSlot = (typeof REGION_SLOTS)[number]
 
-/** The user's world.json: which repo sits in which painted slot. */
-export type World = { regions: { slot: RegionSlot; repo: string; name?: string }[] }
+/** The user's world.json: how the world is drawn, and which repo sits in which painted slot. */
+export type World = { theme: Theme; regions: { slot: RegionSlot; repo: string; name?: string }[] }
 
 export type Autonomy = "afk" | "hitl"
 
@@ -104,16 +106,6 @@ export const RITE_GROUND: Record<Rite, "contract" | "village" | "region"> = {
   "make-verify": "region",
 }
 
-/** Each rite as the world names it. */
-export const RITE_NAMES: Record<Rite, string> = {
-  "implement-slice": "Take the contract",
-  interview: "Hear the villagers",
-  "write-spec": "Draft the bounty",
-  "write-slices": "Post contracts",
-  "make-verify": "Set the proof of kill",
-  "sign-off": "Inspect the trophy",
-}
-
 /**
  * A Claude Code session on the map: one Guslar started on a rite, while its process runs, or one
  * started outside Guslar in a registered repo (`outside`), seen through its hooks until it ends.
@@ -172,7 +164,7 @@ export type PermissionAnswer = { behavior: "allow" } | { behavior: "deny"; messa
 export type HookSighting = { event: string; tool?: string }
 
 /** What the server broadcasts to every open map. Slots are always in REGION_SLOTS order. */
-export type WorldState = { slots: SlotState[]; hunters: Hunter[] }
+export type WorldState = { theme: Theme; slots: SlotState[]; hunters: Hunter[] }
 
 /**
  * What a map posts to `/api/hunters` to send a hunter: on a ready contract when it names no rite,
@@ -203,27 +195,63 @@ export type HookRequest = {
 /** What Guslar answers the hook on a `PermissionRequest`: your decision, or none when there is none to give. */
 export type HookReply = { heard: boolean; decision?: PermissionAnswer }
 
-/** What a hunter is out for, as a phrase after "out": `on S3`, or `to post contracts`. */
-export function errandOf(hunter: Pick<Hunter, "rite" | "contract">): string {
-  switch (hunter.rite) {
-    case undefined:
-      return "on an errand of its own"
-    case "implement-slice":
-      return `on ${hunter.contract ?? "a contract"}`
-    case "sign-off":
-      return `to inspect the trophy of ${hunter.contract ?? "a contract"}`
-    default:
-      return `to ${RITE_NAMES[hunter.rite].toLowerCase()}`
-  }
-}
+/** The hunter a village or region is held by, as a refusal names it. */
+export type Holder = Pick<Hunter, "name" | "rite" | "contract">
 
 /**
- * A village takes one hunter at a time, and so does a region for its own rites; this is what
- * either says to a second one.
+ * Why the server would not do what a map asked, as a reason code and the facts it names, with no
+ * words: the map says it in its world's own. A refused request is answered `{ refusal }`, with the
+ * HTTP status that says so; a request that cannot be read at all is answered `{ error }`.
  */
-export function refusalOf(place: { title: string }, holder: Pick<Hunter, "name" | "rite" | "contract">): string {
-  return `${place.title} refuses a second hunter: ${holder.name} is out ${errandOf(holder)}.`
+export type Refusal =
+  | { reason: "no-region"; slot: string }
+  | { reason: "no-village"; region: string; village?: string }
+  | { reason: "no-contract"; village?: string; contract?: string }
+  /** A village takes one hunter at a time, and so does a region for its own rites. */
+  | { reason: "busy"; place: string; holder: Holder }
+  | { reason: "being-sent"; place: string }
+  | { reason: "not-ready"; village?: string; contract: string; state: ContractState }
+  | { reason: "not-pending"; village?: string; contract: string; state: ContractState }
+  | { reason: "contracts-posted"; village: string }
+  | { reason: "cannot-start"; program: string; problem: string }
+  | { reason: "no-hunter" }
+  | { reason: "outside"; hunter: string }
+  | { reason: "empty-reply" }
+  | { reason: "no-session"; hunter: string }
+  | { reason: "cannot-resume"; hunter: string; problem: string }
+  | { reason: "not-listening"; hunter: string }
+  | { reason: "not-begun"; hunter: string }
+  | { reason: "cannot-open-terminal"; hunter: string; problem: string }
+  | { reason: "not-waiting"; hunter: string }
+  | { reason: "still-out"; hunter: string }
+
+/** Every reason code a refusal can carry, listed once so each theme can be held to wording them all. */
+const REASONS: Record<Refusal["reason"], true> = {
+  "no-region": true,
+  "no-village": true,
+  "no-contract": true,
+  busy: true,
+  "being-sent": true,
+  "not-ready": true,
+  "not-pending": true,
+  "contracts-posted": true,
+  "cannot-start": true,
+  "no-hunter": true,
+  outside: true,
+  "empty-reply": true,
+  "no-session": true,
+  "cannot-resume": true,
+  "not-listening": true,
+  "not-begun": true,
+  "cannot-open-terminal": true,
+  "not-waiting": true,
+  "still-out": true,
 }
+
+export const REFUSAL_REASONS = Object.keys(REASONS) as Refusal["reason"][]
+
+/** What the server answers a request it refused. */
+export type Refused = { refusal: Refusal }
 
 export type ServerMessage = { type: "world"; world: WorldState }
 

@@ -1,33 +1,14 @@
 import { useEffect, useId, useRef, useState } from "react"
-import { errandOf, isReturned, refusalOf, RITE_NAMES, type Hunter, type RegionSlot, type Rite } from "../shared/world.js"
+import { isReturned, type Hunter, type RegionSlot, type Rite } from "../shared/world.js"
 import { Chooser, sendTake } from "./Chooser.js"
+import { sayRefusal, useWords, type Words } from "./words/index.js"
 
 /** The rites a region performs itself, before or beside any one village. */
-const REGION_RITES: { rite: Rite; detail: string }[] = [
-  { rite: "interview", detail: "A hunter asks what the region needs, until nothing is left unsettled." },
-  { rite: "write-spec", detail: "A hunter writes the bounty a new village is founded on." },
-  { rite: "make-verify", detail: "A hunter sets how a kill in this region is proven." },
-]
-
-/**
- * What the chooser asks before it asks how far, on the one rite the map cannot describe by itself:
- * the others are sent at a spec or a contract, an interview at nothing until you say so.
- */
-const INTERVIEW_MESSAGE = {
-  label: "What shall the hunter ask you about?",
-  hint: "Leave it empty and it asks what the region needs.",
-}
+const REGION_RITES = ["interview", "write-spec", "make-verify"] as const
 
 /** What the region's list says of the hunter sent on one of its rites: out on it, or how it came back. */
-function hunterLine(hunter: Hunter): string {
-  switch (hunter.state) {
-    case "returned-trophy":
-      return `${hunter.name} returned with a trophy`
-    case "returned-wounded":
-      return `${hunter.name} returned wounded`
-    default:
-      return `${hunter.name} is out ${errandOf(hunter)}`
-  }
+function hunterLine(words: Words, hunter: Hunter): string {
+  return words.hunter.returned(hunter) ?? words.hunter.out(hunter)
 }
 
 /**
@@ -47,6 +28,7 @@ export function RegionRites({
   hunters: Hunter[]
   onClose: () => void
 }) {
+  const words = useWords()
   const dialog = useRef<HTMLDialogElement>(null)
   const heading = useId()
   const [choosing, setChoosing] = useState<Rite>()
@@ -60,7 +42,7 @@ export function RegionRites({
   const send = (rite: Rite) => {
     const holder = hunters.find((h) => !isReturned(h))
     if (holder) {
-      setRefusal(refusalOf({ title: name }, holder))
+      setRefusal(sayRefusal(words, { reason: "busy", place: name, holder }))
       return
     }
     setRefusal(undefined)
@@ -82,18 +64,18 @@ export function RegionRites({
       }}
     >
       <h2 id={heading} className="chooser-heading">
-        <span className="visually-hidden">Rites of </span>
+        <span className="visually-hidden">{words.rites.of}</span>
         {name}
       </h2>
-      <p className="chooser-title">{`The ${slot.replace("-", " ")}`}</p>
-      {hunter && <p className="rites-hunter">{hunterLine(hunter)}</p>}
-      <p className="chooser-ask">Which rite will you have a hunter perform here?</p>
-      <ul className="chooser-modes" aria-label="Rites">
-        {REGION_RITES.map(({ rite, detail }) => (
+      <p className="chooser-title">{words.rites.slot(words.map.slots[slot])}</p>
+      {hunter && <p className="rites-hunter">{hunterLine(words, hunter)}</p>}
+      <p className="chooser-ask">{words.rites.ask}</p>
+      <ul className="chooser-modes" aria-label={words.rites.list}>
+        {REGION_RITES.map((rite) => (
           <li key={rite}>
             <button type="button" className="chooser-mode" onClick={() => send(rite)}>
-              <span className="chooser-label">{RITE_NAMES[rite]}</span>
-              <span className="chooser-detail">{detail}</span>
+              <span className="chooser-label">{words.rites.names[rite]}</span>
+              <span className="chooser-detail">{words.rites.details[rite]}</span>
               <span className="chooser-flag">{`/${rite}`}</span>
             </button>
           </li>
@@ -107,18 +89,18 @@ export function RegionRites({
       <button
         type="button"
         className="chooser-cancel"
-        aria-label="Close the rites"
+        aria-label={words.rites.close}
         onClick={() => dialog.current?.close()}
       >
-        Close
+        {words.close}
       </button>
       {choosing && (
         <Chooser
           key={choosing}
-          heading={`Send a hunter ${errandOf({ rite: choosing })}`}
+          heading={words.chooser.send(words.hunter.errand({ rite: choosing }))}
           title={name}
-          message={choosing === "interview" ? INTERVIEW_MESSAGE : undefined}
-          onChoose={(permissionMode, message) => sendTake({ slot, rite: choosing, permissionMode, message })}
+          message={choosing === "interview" ? words.rites.interview : undefined}
+          onChoose={(permissionMode, message) => sendTake(words, { slot, rite: choosing, permissionMode, message })}
           onClose={() => setChoosing(undefined)}
         />
       )}

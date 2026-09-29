@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import WebSocket from "ws"
 import { afterEach, describe, expect, it } from "vitest"
-import type { Hunter, JournalEntry, ServerMessage, TakeRequest, WorldState } from "../src/shared/world.js"
+import type { Hunter, JournalEntry, Refusal, ServerMessage, TakeRequest, WorldState } from "../src/shared/world.js"
 import { bogwater } from "./fixture-region.js"
 import { fixtures, receiveWorld, startGuslar, tempDir, waitFor, type Running } from "./guslar.js"
 
@@ -45,13 +45,13 @@ async function post(
   where: string,
   body: unknown,
   origin = new URL(guslar.url).origin,
-): Promise<{ status: number; body: { hunter?: Hunter; sent?: JournalEntry; error?: string } }> {
+): Promise<{ status: number; body: { hunter?: Hunter; sent?: JournalEntry; refusal?: Refusal } }> {
   const res = await fetch(new URL(where, guslar.url), {
     method: "POST",
     headers: { "content-type": "application/json", origin },
     body: JSON.stringify(body),
   })
-  return { status: res.status, body: (await res.json()) as { hunter?: Hunter; sent?: JournalEntry; error?: string } }
+  return { status: res.status, body: (await res.json()) as { hunter?: Hunter; sent?: JournalEntry; refusal?: Refusal } }
 }
 
 /** Every line the fake claude was sent on its stdin, in order. */
@@ -141,7 +141,7 @@ describe("a hunter's journal", () => {
     expect((await post(running, `/api/hunters/${id}/replies`, { text: " \n" })).status).toBe(400)
     expect((await post(running, `/api/hunters/${id}/replies`, { words: "Oak" })).status).toBe(400)
     const nobody = await post(running, "/api/hunters/00000000-0000-4000-8000-000000000000/replies", { text: "Oak" })
-    expect(nobody).toEqual({ status: 404, body: { error: "No such hunter is out." } })
+    expect(nobody).toEqual({ status: 404, body: { refusal: { reason: "no-hunter" } } })
     const elsewhere = await post(running, `/api/hunters/${id}/replies`, { text: "Oak" }, "http://evil.example")
     expect(elsewhere.status).toBe(403)
 

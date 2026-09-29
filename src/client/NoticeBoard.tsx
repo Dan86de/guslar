@@ -1,9 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react"
 import {
-  errandOf,
   isReturned,
-  refusalOf,
-  RITE_NAMES,
   type Contract,
   type Hunter,
   type RegionSlot,
@@ -11,42 +8,26 @@ import {
   type Village,
 } from "../shared/world.js"
 import { Chooser, sendTake } from "./Chooser.js"
-
-/** afk: the hunter rides alone. hitl: the alderman summons you before it is paid. */
-const AUTONOMY = { afk: "rides alone", hitl: "summons you" } as const
+import { sayRefusal, useWords, type Words } from "./words/index.js"
 
 /** A rite the board sends a hunter on: a contract's hunt or inspection, or posting the village's contracts. */
 type Errand = { rite: Rite; contract?: Contract }
 
-function stateLine(contract: Contract): string {
-  switch (contract.state) {
-    case "done":
-      return "Done"
-    case "pending":
-      return "Pending"
-    case "ready":
-      return "Ready"
-    case "sealed":
-      return `Sealed by ${(contract.sealedBy ?? []).join(", ")}`
-  }
+function stateLine(words: Words, contract: Contract): string {
+  return contract.state === "sealed" ? words.board.sealed(contract.sealedBy ?? []) : words.board.states[contract.state]
 }
 
 /** What a card or the board says of the hunter sent on it: out on it, or how it came back. */
-function hunterLine(hunter: Hunter): string {
-  switch (hunter.state) {
-    case "returned-trophy":
-      return `${hunter.name} returned with a trophy`
-    case "returned-wounded":
-      return `${hunter.name} returned wounded`
+function hunterLine(words: Words, hunter: Hunter): string {
+  const back = words.hunter.returned(hunter)
+  if (back !== undefined) return back
+  switch (hunter.rite) {
+    case "implement-slice":
+      return words.hunter.hunts(hunter.name)
+    case "sign-off":
+      return words.hunter.inspects(hunter.name)
     default:
-      switch (hunter.rite) {
-        case "implement-slice":
-          return `${hunter.name} hunts it`
-        case "sign-off":
-          return `${hunter.name} inspects it`
-        default:
-          return `${hunter.name} is out ${errandOf(hunter)}`
-      }
+      return words.hunter.out(hunter)
   }
 }
 
@@ -59,6 +40,7 @@ function ContractCard({
   hunter: Hunter | undefined
   onSend: (errand: Errand) => void
 }) {
+  const words = useWords()
   const free = !(hunter && !isReturned(hunter))
   // A pending card has room for its Inspect or its hunter's line, not both; once the hunter is
   // back, Inspect is what the card asks of you, and the map still shows how the hunter came back.
@@ -70,31 +52,31 @@ function ContractCard({
       <span className="card-text">
         <span className="card-head">
           <span className="card-id">{contract.id}</span>
-          <span className="card-autonomy" title={AUTONOMY[contract.autonomy]}>
+          <span className="card-autonomy" title={words.board.autonomy[contract.autonomy]}>
             {contract.autonomy}
           </span>
         </span>
         <span className="card-title">{contract.title}</span>
-        <span className="card-state">{stateLine(contract)}</span>
-        {hunter && !inspectable && <span className="card-hunter">{hunterLine(hunter)}</span>}
+        <span className="card-state">{stateLine(words, contract)}</span>
+        {hunter && !inspectable && <span className="card-hunter">{hunterLine(words, hunter)}</span>}
         {contract.state === "ready" && free && (
           <button
             type="button"
             className="card-take"
-            aria-label={`Take ${contract.id}`}
+            aria-label={words.board.takeContract(contract.id)}
             onClick={() => onSend({ rite: "implement-slice", contract })}
           >
-            Take
+            {words.board.take}
           </button>
         )}
         {inspectable && (
           <button
             type="button"
             className="card-take"
-            aria-label={`${RITE_NAMES["sign-off"]} of ${contract.id}`}
+            aria-label={words.board.inspectContract(contract.id)}
             onClick={() => onSend({ rite: "sign-off", contract })}
           >
-            Inspect
+            {words.board.inspect}
           </button>
         )}
       </span>
@@ -118,6 +100,7 @@ export function NoticeBoard({
   hunters: Hunter[]
   onClose: () => void
 }) {
+  const words = useWords()
   const dialog = useRef<HTMLDialogElement>(null)
   const heading = useId()
   const [choosing, setChoosing] = useState<Errand>()
@@ -133,7 +116,7 @@ export function NoticeBoard({
     // A hunter that has returned holds it no longer.
     const holder = hunters.find((h) => !isReturned(h))
     if (holder) {
-      setRefusal(refusalOf(village, holder))
+      setRefusal(sayRefusal(words, { reason: "busy", place: village.title, holder }))
       return
     }
     setRefusal(undefined)
@@ -158,32 +141,32 @@ export function NoticeBoard({
     >
       <div className="board-art">
         <h2 id={heading} className="board-title">
-          <span className="visually-hidden">Notice board of </span>
+          <span className="visually-hidden">{words.board.of}</span>
           {village.title}
         </h2>
         <button
           type="button"
           className="board-close"
-          aria-label="Close the notice board"
+          aria-label={words.board.close}
           onClick={() => dialog.current?.close()}
         >
-          Close
+          {words.close}
         </button>
         <div className="board-face">
           {village.problem ? (
-            <p className="board-note">The contracts cannot be read. {village.problem}</p>
+            <p className="board-note">{words.board.unreadable(village.problem)}</p>
           ) : village.contracts.length === 0 ? (
             <div className="board-note">
-              <p>No contracts are posted yet.</p>
-              {poster && <p className="board-hunter">{hunterLine(poster)}</p>}
+              <p>{words.board.empty}</p>
+              {poster && <p className="board-hunter">{hunterLine(words, poster)}</p>}
               {!village.slices && !(poster && !isReturned(poster)) && (
                 <button type="button" className="board-rite" onClick={() => send({ rite: "write-slices" })}>
-                  {RITE_NAMES["write-slices"]}
+                  {words.rites.names["write-slices"]}
                 </button>
               )}
             </div>
           ) : (
-            <ul className="cards" aria-label="Contracts">
+            <ul className="cards" aria-label={words.board.contracts}>
               {village.contracts.map((contract) => (
                 <ContractCard
                   key={contract.id}
@@ -204,10 +187,10 @@ export function NoticeBoard({
       {choosing && (
         <Chooser
           key={`${choosing.rite}/${choosing.contract?.id ?? ""}`}
-          heading={`Send a hunter ${errandOf({ rite: choosing.rite, contract: choosing.contract?.id })}`}
+          heading={words.chooser.send(words.hunter.errand({ rite: choosing.rite, contract: choosing.contract?.id }))}
           title={choosing.contract?.title ?? village.title}
           onChoose={(permissionMode) =>
-            sendTake({
+            sendTake(words, {
               slot,
               rite: choosing.rite,
               village: village.slug,

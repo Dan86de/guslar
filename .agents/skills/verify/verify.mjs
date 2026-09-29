@@ -31,6 +31,10 @@ class Refusal extends Error {}
 
 let transcript
 let printed = ""
+// A reader that stops early, like `| head`, closes stdout: the call still runs and is still logged.
+process.stdout.on("error", (error) => {
+  if (error.code !== "EPIPE") throw error
+})
 function out(line = "") {
   printed += `${line}\n`
   process.stdout.write(`${line}\n`)
@@ -339,6 +343,8 @@ const commands = {
       const res = await page.goto(url, { waitUntil: "load" })
       out(`opened ${url}: HTTP ${res?.status()}`)
       out(`title: ${await page.title()}`)
+      const icon = await page.locator('link[rel="icon"]').first().getAttribute("href", { timeout: 1000 }).catch(() => null)
+      out(`icon: ${icon === null ? "(none)" : new URL(icon, url).pathname}`)
       // The map is ready when its region list renders and the map stops being busy.
       await page.locator('.map[aria-busy="false"]').waitFor({ timeout: 15000 }).catch(() => {})
       await page.waitForTimeout(1000)
@@ -430,10 +436,25 @@ const commands = {
   async http(flags, [target]) {
     const run = runDir(flags)
     const state = readState(run)
+    if (flags.save !== undefined && !/^[\w-]+(\.[\w]+)?$/.test(flags.save)) {
+      throw new Refusal(`invalid file name "${flags.save}": use letters, digits, - and _, and one extension`)
+    }
     const res = await fetch(ownUrl(state, target))
-    const body = await res.text()
-    out(`HTTP ${res.status} ${res.headers.get("content-type") ?? ""}`)
-    out(body.length > 4000 ? `${body.slice(0, 4000)}\n… (${body.length} bytes)` : body)
+    const type = res.headers.get("content-type") ?? ""
+    const bytes = Buffer.from(await res.arrayBuffer())
+    out(`HTTP ${res.status} ${type}`)
+    // Text is printed; anything else, like an image, only by its size, and saved to be looked at.
+    if (/^(text\/|application\/json|image\/svg\+xml)/.test(type)) {
+      const body = bytes.toString("utf8")
+      out(body.length > 4000 ? `${body.slice(0, 4000)}\n… (${body.length} bytes)` : body)
+    } else {
+      out(`(${bytes.length} bytes of ${type || "unknown type"})`)
+    }
+    if (flags.save !== undefined) {
+      const file = path.join(run, flags.save)
+      writeFileSync(file, bytes)
+      out(`saved ${path.relative(ROOT, file)}`)
+    }
   },
 
   async guslar(flags, args) {
@@ -495,10 +516,12 @@ const commands = {
     const run = runDir(flags)
     if (!name) throw new Refusal("say what to click: click <accessible name of a button>")
     return withPage(run, async (page) => {
-      const buttons = page.getByRole("button", { name, exact: false })
+      // --exact names a button whose name is only a prefix of another's, like Send beside Send home.
+      const exact = flags.exact === true
+      const buttons = page.getByRole("button", { name, exact })
       const count = await buttons.count()
       if (count !== 1) {
-        out(count === 0 ? `no button named "${name}"` : `${count} buttons match "${name}"; name one of them fully`)
+        out(count === 0 ? `no button named "${name}"` : `${count} buttons ${exact ? "are named" : "match"} "${name}"; name one of them fully`)
         for (const button of await page.getByRole("button").all()) out(`  button: ${await accessibleName(button)}`)
         return 1
       }
@@ -735,7 +758,12 @@ function newerThanBuild(builtAt) {
     }
   }
   walk(path.join(ROOT, "src"))
-  const art = readdirSync(path.join(ROOT, "art")).filter((file) => file.endsWith(".png")).map((file) => `art/${file}`)
+  // The art each theme bundles: Guslar's in `art/`, every other theme's in a folder of its own.
+  const art = ["art", "art/vaillant"].flatMap((dir) =>
+    readdirSync(path.join(ROOT, dir))
+      .filter((file) => file.endsWith(".png"))
+      .map((file) => `${dir}/${file}`),
+  )
   for (const file of ["index.html", "package.json", "vite.config.ts", ...art]) {
     if (statSync(path.join(ROOT, file)).mtimeMs > builtAt) changed.push(file)
   }
@@ -789,10 +817,10 @@ function parse(argv) {
   const passthrough = name === "guslar" || name === "git"
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i]
-    if (arg === "--run" || (name === "guslar" && arg === "--env") || (!passthrough && ["--world", "--timeout", "--size", "--signal", "--clip", "--zoom"].includes(arg))) {
+    if (arg === "--run" || (name === "guslar" && arg === "--env") || (!passthrough && ["--world", "--timeout", "--size", "--signal", "--clip", "--zoom", "--save"].includes(arg))) {
       flags[arg.slice(2)] = rest[++i]
-    } else if (!passthrough && arg === "--gone") {
-      flags.gone = true
+    } else if (!passthrough && (arg === "--gone" || arg === "--exact")) {
+      flags[arg.slice(2)] = true
     } else {
       positional.push(arg)
     }

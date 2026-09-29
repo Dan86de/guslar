@@ -1,10 +1,11 @@
-import { existsSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 import type { AddressInfo, Socket } from "node:net"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import sirv from "sirv"
 import { WebSocketServer, type WebSocket } from "ws"
+import { THEME_TABS, type Theme } from "../shared/theme.js"
 import {
   type HookReply,
   type HookRequest,
@@ -12,6 +13,8 @@ import {
   isRegionSlot,
   isRite,
   type PermissionAnswer,
+  type Refusal,
+  type Refused,
   RITE_GROUND,
   RITES,
   type ServerMessage,
@@ -60,9 +63,34 @@ function clientDir(): string {
   return path.join(dir, "dist", "client")
 }
 
+/**
+ * The built map's page, with the theme's title and icon in place of Guslar's, so a browser tab
+ * shows which world it is before the map has loaded, and the theme on its root, so its colours are
+ * the world's from the first paint.
+ */
+function pageOf(dir: string, theme: Theme): string {
+  const page = readFileSync(path.join(dir, "index.html"), "utf8")
+  const { title, icon } = THEME_TABS[theme]
+  const ROOT = /<html([^>]*) data-theme="[^"]*"/
+  const TITLE = /<title>[^<]*<\/title>/
+  const ICON = /<link rel="icon"[^>]*>/
+  if (!ROOT.test(page) || !TITLE.test(page) || !ICON.test(page)) {
+    throw new Error("guslar: its built page has no theme, title or icon to set")
+  }
+  return page
+    .replace(ROOT, `<html$1 data-theme="${theme}"`)
+    .replace(TITLE, `<title>${title}</title>`)
+    .replace(ICON, `<link rel="icon" type="${icon.type}" href="${icon.href}" />`)
+}
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" })
   res.end(JSON.stringify(body))
+}
+
+/** The body of a refused request: the reason, with no words, which the map says in its own. */
+function refused(refusal: Refusal): Refused {
+  return { refusal }
 }
 
 function readBody(req: IncomingMessage, max: number): Promise<string> {
@@ -120,16 +148,19 @@ function parseReply(raw: unknown): string | undefined {
 }
 
 export async function startServer(options: {
+  theme: Theme
   slots: SlotState[]
   hunters: Hunters
   host: string
   port: number
 }): Promise<GuslarServer> {
   let slots = options.slots
-  const { hunters } = options
-  const world = (): WorldState => ({ slots, hunters: hunters.list() })
+  const { hunters, theme } = options
+  const world = (): WorldState => ({ theme, slots, hunters: hunters.list() })
   const dir = clientDir()
-  const serveClient = existsSync(dir) ? sirv(dir, { single: true, etag: true }) : undefined
+  const built = existsSync(dir)
+  const serveClient = built ? sirv(dir, { etag: true }) : undefined
+  const page = built ? pageOf(dir, theme) : undefined
   const host = options.host.includes(":") ? `[${options.host}]` : options.host
   let port = 0
 
@@ -185,7 +216,7 @@ export async function startServer(options: {
     }
     const result = await hunters.take(request, slots)
     if ("hunter" in result) sendJson(res, 201, result)
-    else sendJson(res, result.status, { error: result.error })
+    else sendJson(res, result.status, refused(result.refusal))
   }
 
   const reply = async (id: string, req: IncomingMessage, res: ServerResponse) => {
@@ -198,7 +229,7 @@ export async function startServer(options: {
     }
     const result = await hunters.reply(id, text)
     if ("sent" in result) sendJson(res, 201, result)
-    else sendJson(res, result.status, { error: result.error })
+    else sendJson(res, result.status, refused(result.refusal))
   }
 
   const answer = async (id: string, promptId: string, req: IncomingMessage, res: ServerResponse) => {
@@ -211,7 +242,7 @@ export async function startServer(options: {
     }
     const result = hunters.answer(id, promptId, decision)
     if ("answered" in result) sendJson(res, 200, result)
-    else sendJson(res, result.status, { error: result.error })
+    else sendJson(res, result.status, refused(result.refusal))
   }
 
   const openTerminal = async (id: string, req: IncomingMessage, res: ServerResponse) => {
@@ -219,7 +250,7 @@ export async function startServer(options: {
     if (raw === undefined) return
     const result = await hunters.openTerminal(id)
     if ("hunter" in result) sendJson(res, result.opened ? 201 : 200, { hunter: result.hunter })
-    else sendJson(res, result.status, { error: result.error })
+    else sendJson(res, result.status, refused(result.refusal))
   }
 
   /**
@@ -234,7 +265,7 @@ export async function startServer(options: {
     }
     const result = hunters.sendHome(id)
     if ("hunter" in result) sendJson(res, 200, result)
-    else sendJson(res, result.status, { error: result.error })
+    else sendJson(res, result.status, refused(result.refusal))
   }
 
   /**
@@ -333,8 +364,15 @@ export async function startServer(options: {
       res.end()
       return
     }
-    if (serveClient) {
-      serveClient(req, res)
+    if (serveClient && page !== undefined) {
+      // The map is one page: every path that is not one of its files gets it, in this world's theme.
+      const sendPage = () => {
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" })
+        res.end(req.method === "HEAD" ? undefined : page)
+      }
+      const { pathname } = new URL(req.url ?? "/", "http://guslar")
+      if (pathname === "/" || pathname === "/index.html") sendPage()
+      else serveClient(req, res, sendPage)
       return
     }
     res.writeHead(503, { "content-type": "text/plain" })
