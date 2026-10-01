@@ -920,6 +920,146 @@ button.plaque:focus-visible {
   overflow-wrap: anywhere;
 }
 
+/* A hunter's words, set as type in the plaques' hand rather than printed with their marks. This is
+   the `said` entry alone: what you typed and what a tool was given keep every character. */
+.said {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55em;
+  min-width: 0;
+  margin-top: 2px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+/* Blocks stand apart by the gap above, so none brings a margin of its own, and none may widen the
+   leaf: a fence scrolls inside itself instead. */
+.said > * {
+  margin: 0;
+  min-width: 0;
+}
+
+/* Every heading takes one form, whatever its depth: small capitals over a hairline. It is set a
+   size above the small capitals that name who spoke, so the first one is read as a heading and not
+   as a second label. */
+.said-heading {
+  padding-bottom: 2px;
+  font-size: 14px;
+  font-weight: normal;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
+}
+
+/* A heading takes more air above it than below, as a heading does on any page. */
+.said-heading:not(:first-child) {
+  margin-top: 0.35em;
+}
+
+/* A hunter's own line breaks are kept: how it broke its lines is part of what it said. */
+.said-paragraph,
+.said-quote {
+  white-space: pre-wrap;
+}
+
+/* Bold is a low wash behind full-strength ink: a display serif smears when the browser fakes it,
+   and small capitals would read as a heading instead of as emphasis. */
+.said-strong {
+  padding: 0 0.15em;
+  font-weight: normal;
+  background: color-mix(in srgb, var(--rust) 16%, transparent);
+  border-radius: 1px;
+}
+
+.said-list {
+  padding-left: 1.3em;
+}
+
+.said-list li::marker {
+  color: var(--rust);
+}
+
+.said-list li + li {
+  margin-top: 0.2em;
+}
+
+/* Code, inline and fenced: the one thing in the leaf not set in the book face. */
+.said-code,
+.said-fence code {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.8em;
+}
+
+.said-code {
+  padding: 0 0.2em;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  border-radius: 1px;
+}
+
+/* A fenced block stands on paper of its own and scrolls sideways rather than widening the leaf. */
+.said-fence {
+  padding: 5px 8px;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--ink) 35%, transparent);
+  scrollbar-width: thin;
+  scrollbar-color: var(--bog) transparent;
+}
+
+.said-fence code {
+  white-space: pre;
+}
+
+/* A quotation leans in behind a rule of its own, in the italic face the journal now loads. */
+.said-quote {
+  padding-left: 10px;
+  color: color-mix(in srgb, var(--ink) 72%, transparent);
+  font-style: italic;
+  border-left: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
+}
+
+/* A table in hairlines, its head in small capitals. */
+.said-table {
+  width: 100%;
+  font-size: 0.9em;
+  border-collapse: collapse;
+}
+
+.said-table th,
+.said-table td {
+  padding: 2px 8px 2px 0;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+}
+
+.said-table th {
+  font-size: 0.85em;
+  font-weight: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-bottom-color: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+
+.said-table tr:last-child td {
+  border-bottom: 0;
+}
+
+/* A rule the hunter drew, kept short so it is never taken for one of the leaf's own. */
+.said-rule {
+  align-self: center;
+  width: 40%;
+  height: 0;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
+}
+
+/* A link is said, not offered: there is nothing here to follow, and the dots say as much. */
+.said-link {
+  text-decoration: underline dotted color-mix(in srgb, var(--ink) 45%, transparent);
+  text-underline-offset: 2px;
+}
+
 /* What you sent sits apart, on a darker leaf with a rust rule. */
 .entry[data-kind="you"] {
   padding: 6px 10px 8px;

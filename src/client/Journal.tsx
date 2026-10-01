@@ -1,4 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type SyntheticEvent } from "react"
+import { Said } from "./Said.js"
 import { isReturned, type Hunter, type JournalEntry, type ReplyRequest } from "../shared/world.js"
 import { whyRefused } from "./refused.js"
 import { sayRefusal, useWords, type Words } from "./words/index.js"
@@ -48,13 +49,15 @@ function Entry({ entry, hunter }: { entry: JournalEntry; hunter: Hunter }) {
         </li>
       )
     case "said":
+      // A hunter's words are the one text here that is set as type. What you typed and what a tool
+      // was given are shown as they were written, since neither was written as markdown.
       return (
         <li className="entry" data-kind="said">
           <span className="entry-who">
             {hunter.name}
             <span className="entry-colon">:</span>
           </span>
-          <span className="entry-text">{entry.text}</span>
+          <Said text={entry.text} />
         </li>
       )
     case "tool":
