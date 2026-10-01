@@ -35,12 +35,36 @@ function sendHome(hunter: Hunter): void {
   }).catch(() => undefined)
 }
 
-function Entry({ entry, hunter }: { entry: JournalEntry; hunter: Hunter }) {
+/**
+ * Which row of the chronicle each entry stands on, the reading page and the rail being its two
+ * columns. Everything the hunter and you said takes the next row of the page, so the reading runs
+ * on unbroken; a tool call takes the row of the words it followed, or the next row down the rail
+ * when that row is already spoken for, so a turn's calls stand beside the turn that made them, in
+ * the order it made them, and never above the words that led to them.
+ */
+function rowsOf(entries: JournalEntry[]): number[] {
+  const rows: number[] = []
+  let page = 0
+  let rail = 0
+  for (const entry of entries) {
+    if (entry.kind === "tool") {
+      rail = Math.max(page, rail + 1)
+      rows.push(rail)
+    } else {
+      page += 1
+      rows.push(page)
+    }
+  }
+  return rows
+}
+
+function Entry({ entry, hunter, row }: { entry: JournalEntry; hunter: Hunter; row: number }) {
   const words = useWords()
+  const style = { gridRow: String(row) }
   switch (entry.kind) {
     case "you":
       return (
-        <li className="entry" data-kind="you">
+        <li className="entry" data-kind="you" style={style}>
           <span className="entry-who">
             {words.journal.you}
             <span className="entry-colon">:</span>
@@ -52,7 +76,7 @@ function Entry({ entry, hunter }: { entry: JournalEntry; hunter: Hunter }) {
       // A hunter's words are the one text here that is set as type. What you typed and what a tool
       // was given are shown as they were written, since neither was written as markdown.
       return (
-        <li className="entry" data-kind="said">
+        <li className="entry" data-kind="said" style={style}>
           <span className="entry-who">
             {hunter.name}
             <span className="entry-colon">:</span>
@@ -62,7 +86,7 @@ function Entry({ entry, hunter }: { entry: JournalEntry; hunter: Hunter }) {
       )
     case "tool":
       return (
-        <li className="entry" data-kind="tool">
+        <li className="entry" data-kind="tool" style={style}>
           <span className="entry-tool">
             {entry.tool}
             <span className="entry-colon">:</span>
@@ -72,7 +96,7 @@ function Entry({ entry, hunter }: { entry: JournalEntry; hunter: Hunter }) {
       )
     case "result":
       return (
-        <li className="entry" data-kind="result" data-error={entry.error ? "" : undefined}>
+        <li className="entry" data-kind="result" data-error={entry.error ? "" : undefined} style={style}>
           {entry.error ? words.journal.turnFails(entry.text) : words.journal.turnEnds}
         </li>
       )
@@ -80,9 +104,11 @@ function Entry({ entry, hunter }: { entry: JournalEntry; hunter: Hunter }) {
 }
 
 /**
- * A hunter's journal: its conversation and tool calls as they arrive, and a line to write back to
- * it. It stands beside the map rather than over it, so the hunter can still be watched. A session
- * started outside Guslar is read here and written to in its own terminal.
+ * A hunter's chronicle: one surface for reading its whole session, opened from its leaf in the
+ * margin. The turns run down a reading page wide enough for a table, a diff and a fenced block,
+ * the tool calls of each turn stand on a rail beside it, and a line at the foot writes back to
+ * that hunter by name. A session started outside Guslar is read here and written to in its own
+ * terminal.
  */
 export function Journal({
   hunter,
@@ -105,6 +131,7 @@ export function Journal({
   const [sending, setSending] = useState(false)
   const [problem, setProblem] = useState<string>()
   const atEnd = useRef(true)
+  const rows = rowsOf(hunter.journal)
 
   // Only a hunter that has come back goes home: one still out may hold a permission request, and
   // letting go of an unanswered request is read by its hook as Guslar being gone, which allows it.
@@ -220,7 +247,7 @@ export function Journal({
         }}
       >
         {hunter.journal.map((entry, index) => (
-          <Entry key={index} entry={entry} hunter={hunter} />
+          <Entry key={index} entry={entry} hunter={hunter} row={rows[index] ?? index + 1} />
         ))}
       </ol>
       {hunter.outside ? (

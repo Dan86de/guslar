@@ -10,6 +10,10 @@
   /* The lit parchment of a field or a hovered plaque. */
   --glint: #fffaeb;
   --bone-lit: #eee3c6;
+  /* How wide the chronicle stands: a reading page and the rail of tool calls beside it, which is
+     what a table, a diff and a fenced block are asked to fit in. The terminal along the map's foot
+     reads it too, so it stops short of the chronicle wherever the chronicle ends. */
+  --chronicle: min(880px, calc(100vw - 32px));
   font-family: "IM Fell English", Georgia, serif;
 }
 
@@ -757,12 +761,14 @@ button.plaque:focus-visible {
   outline: none;
 }
 
-/* The journal: a parchment leaf beside the map, the conversation in ink, a line to write back. */
+/* The chronicle: one surface for reading a hunter's session, in parchment over the map's right
+   edge. The turns run down a reading page and the tool calls of each turn stand on a rail beside
+   it, so the work a turn did is read without breaking the words it did them for. */
 
 .journal {
   position: fixed;
   inset: 16px 16px 16px auto;
-  width: min(420px, calc(100vw - 32px));
+  width: var(--chronicle);
   height: auto;
   max-height: none;
   margin: 0;
@@ -786,7 +792,7 @@ button.plaque:focus-visible {
 
 .journal-head {
   position: relative;
-  padding: 12px 16px 12px;
+  padding: 12px 24px 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
 }
 
@@ -880,7 +886,7 @@ button.plaque:focus-visible {
 
 .journal-close {
   position: absolute;
-  right: 12px;
+  right: 20px;
   top: 12px;
   padding: 0.15em 0.8em 0.25em;
   color: var(--bone);
@@ -898,19 +904,30 @@ button.plaque:focus-visible {
   outline: none;
 }
 
+/* The reading page and the rail, as two columns of one grid: every entry but a tool call takes the
+   next row of the page, so the reading runs on unbroken, and a tool call takes the row of the words
+   it followed, or the next row down the rail when that row is already spoken for. The rows come
+   from the markup, which knows where each turn begins and ends; the columns are here. */
 .journal-entries {
+  --rail: 216px;
   flex: 1;
   min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail);
+  align-content: start;
+  gap: 12px 24px;
   margin: 0;
-  padding: 14px 16px;
+  padding: 16px 24px;
   overflow: hidden auto;
   list-style: none;
   scrollbar-width: thin;
   scrollbar-color: var(--bog) transparent;
 }
 
-.entry + .entry {
-  margin-top: 10px;
+/* A page entry never strays into the rail, whatever row it is on. */
+.entry {
+  grid-column: 1;
+  min-width: 0;
 }
 
 .entry-who {
@@ -1102,19 +1119,19 @@ button.plaque:focus-visible {
   color: var(--rust);
 }
 
-/* A tool call is a margin note: the tool in small capitals, what it was given in monospace. */
+/* A tool call stands on the rail, behind a hairline at its left: the tool in small capitals over
+   what it was given in monospace, since the rail is too narrow to set the two side by side. */
 .entry[data-kind="tool"] {
+  grid-column: 2;
   display: flex;
-  gap: 8px;
-  align-items: baseline;
-  margin-left: 10px;
-  padding-left: 10px;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 12px;
   color: color-mix(in srgb, var(--ink) 78%, transparent);
   border-left: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
 }
 
 .entry-tool {
-  flex-shrink: 0;
   font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1156,14 +1173,14 @@ button.plaque:focus-visible {
   grid-template-columns: 1fr auto;
   gap: 8px;
   align-items: end;
-  padding: 12px 16px 12px;
+  padding: 12px 24px 12px;
   border-top: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
 }
 
 /* Where the reply line would be: an outside session is written to in its own terminal. */
 .journal-outside {
   margin: 0;
-  padding: 14px 16px;
+  padding: 14px 24px;
   border-top: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
   font-size: 16px;
   font-style: italic;
@@ -1562,9 +1579,9 @@ button.plaque:focus-visible {
     4px 8px 18px rgb(0 0 0 / 0.55);
 }
 
-/* Beside an open journal, it stops short of the journal's leaf. */
+/* Beside an open chronicle, it stops short of the chronicle's edge. */
 .hunter-terminal[data-beside-journal] {
-  right: calc(min(420px, 100vw - 32px) + 32px);
+  right: calc(var(--chronicle) + 32px);
 }
 
 .hunter-terminal[open] {
