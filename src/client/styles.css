@@ -904,6 +904,52 @@ button.plaque:focus-visible {
   outline: none;
 }
 
+/* The index of hunters at the head's right, under the close: one name per hunter on the map, in
+   the order they stand down it, the one being read marked in rust. It stands in the head's own
+   free band, out of the flow, so turning the chronicle from one hunter to another never moves the
+   reading page under it by a pixel. */
+.journal-index {
+  position: absolute;
+  right: 20px;
+  /* In the clear strip between the close and the line below the name: out of the flow, it cannot
+     push the page down, and standing above that line it is not run into by a long one. */
+  top: 40px;
+  display: flex;
+  gap: 14px;
+  max-width: 50%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bog) transparent;
+}
+
+.journal-turn {
+  padding: 0 0 0.15em;
+  color: color-mix(in srgb, var(--ink) 62%, transparent);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  cursor: pointer;
+}
+
+.journal-turn:hover,
+.journal-turn:focus-visible {
+  color: var(--rust);
+  border-bottom-color: var(--rust);
+  outline: none;
+}
+
+/* The page you are on: in full ink, ruled under in rust, and nowhere to turn to. */
+.journal-turn[data-current] {
+  color: var(--ink);
+  border-bottom-color: var(--rust);
+  cursor: default;
+}
+
 /* The reading page and the rail, as two columns of one grid: every entry but a tool call takes the
    next row of the page, so the reading runs on unbroken, and a tool call takes the row of the words
    it followed, or the next row down the rail when that row is already spoken for. The rows come

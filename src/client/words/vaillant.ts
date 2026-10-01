@@ -214,6 +214,8 @@ export const vaillant: Words = {
     sendHome: "Back to the depot",
     close: "Close the service log",
     entries: "Entries",
+    journals: "Service logs",
+    turnTo: (name: string) => `Go to ${name}`,
     outside: (name: string) => `Started outside Guslar: write to ${name} in its own terminal.`,
     reply: (name: string) => `Reply to ${name}`,
     draft: (name: string) => `Write to ${name}…`,

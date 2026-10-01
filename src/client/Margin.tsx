@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { heardLast, latestWords, type Heard } from "./heard.js"
 import { plain } from "./markdown.js"
-import type { Hunter, WorldState } from "../shared/world.js"
+import type { Hunter } from "../shared/world.js"
 import { useWords, type Words } from "./words/index.js"
 
 /** How often the leaves say again how long ago their hunters spoke, in ms. */
@@ -99,23 +99,22 @@ function Leaf({
 
 /**
  * The margin: a leaf for every hunter on the map, down its right edge. The leaves stand in the
- * order their hunters stand down the map, which the map itself reports, so the margin reads the
- * way the map reads; recency is carried by a mark on the leaf heard last instead of by the order.
+ * order their hunters stand down the map, which the page hands it, so the margin reads the way
+ * the map reads; recency is carried by a mark on the leaf heard last instead of by the order.
  *
  * Which leaf is open is the page's, not the margin's: the map marks that hunter's figure for as
  * long as it is, so a glance at a leaf says on the world which hunter it is about.
  */
 export function Margin({
-  world,
+  hunters,
   heard,
-  order,
   open,
   onOpen,
   onRead,
 }: {
-  world: WorldState
+  /** Every hunter on the map, in the order they stand down it. */
+  hunters: Hunter[]
   heard: Map<string, Heard>
-  order: string[]
   /** The hunter whose leaf is open, if any. */
   open: string | undefined
   /** Says which hunter's leaf is open now, or none. */
@@ -125,19 +124,13 @@ export function Margin({
 }) {
   const words = useWords()
   const now = useClock()
-  if (world.hunters.length === 0) return null
+  if (hunters.length === 0) return null
 
-  // A hunter the map has not placed yet keeps the world's own order, at the foot of the margin.
-  const place = (id: string) => {
-    const at = order.indexOf(id)
-    return at === -1 ? order.length : at
-  }
-  const leaves = [...world.hunters].sort((one, other) => place(one.id) - place(other.id))
   const marked = heardLast(heard)
 
   return (
     <section className="margin" aria-label={words.margin.leaves}>
-      {leaves.map((hunter) => (
+      {hunters.map((hunter) => (
         <Leaf
           key={hunter.id}
           hunter={hunter}

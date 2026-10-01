@@ -224,6 +224,10 @@ export const guslar = {
     sendHome: "Send home",
     close: "Close the journal",
     entries: "Entries",
+    /** The index at the journal's head, one name per hunter on the map, which turns it to that hunter. */
+    journals: "Journals",
+    /** What each name in that index does; the name itself is what stands on the page. */
+    turnTo: (name: string) => `Turn to ${name}`,
     /** In place of the reply line, in the journal of a session started outside Guslar. */
     outside: (name: string) => `Started outside Guslar: write to ${name} in its own terminal.`,
     reply: (name: string) => `Reply to ${name}`,

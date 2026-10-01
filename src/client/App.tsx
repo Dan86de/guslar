@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useLayoutEffect, useState } from "react"
+import { lazy, Suspense, useCallback, useLayoutEffect, useMemo, useState } from "react"
 import { Journal } from "./Journal.js"
 import { Margin } from "./Margin.js"
 import { NoticeBoard } from "./NoticeBoard.js"
@@ -10,7 +10,7 @@ import { boundOf } from "./bound.js"
 import { pageTheme } from "./art.js"
 import { useWords, WORDS, WordsProvider } from "./words/index.js"
 import { THEME_TABS, type Theme } from "../shared/theme.js"
-import type { RegionSlot } from "../shared/world.js"
+import type { Hunter, RegionSlot } from "../shared/world.js"
 
 // The terminal brings a whole terminal emulator, so it loads only once one is opened.
 const TerminalView = lazy(() => import("./TerminalView.js").then((module) => ({ default: module.TerminalView })))
@@ -45,6 +45,19 @@ function showTheme(theme: Theme): void {
   }
 }
 
+/**
+ * The hunters in the order they stand down the map, which only the map knows: the order the margin
+ * stands its leaves in, and the order the chronicle's index turns through, so the two read alike.
+ * A hunter the map has not placed yet keeps the world's own order, at the foot.
+ */
+function standing(hunters: Hunter[], order: string[]): Hunter[] {
+  const place = (id: string) => {
+    const at = order.indexOf(id)
+    return at === -1 ? order.length : at
+  }
+  return [...hunters].sort((one, other) => place(one.id) - place(other.id))
+}
+
 function Page({ world, connected, heard, theme }: Connection & { theme: Theme }) {
   const words = useWords()
   const [opened, setOpened] = useState<VillageRef>()
@@ -52,11 +65,12 @@ function Page({ world, connected, heard, theme }: Connection & { theme: Theme })
   const [watching, setWatching] = useState<string>()
   const [glancing, setGlancing] = useState<string>()
   const [performing, setPerforming] = useState<RegionSlot>()
-  // The order the hunters stand in down the map, which only the map knows: the margin reads it.
+  // The order the hunters stand in down the map, which only the map knows.
   const [order, setOrder] = useState<string[]>([])
   const onHunterOrder = useCallback((ids: string[]) => {
     setOrder((was) => (was.length === ids.length && was.every((id, at) => id === ids[at]) ? was : ids))
   }, [])
+  const hunters = useMemo(() => standing(world?.hunters ?? [], order), [world?.hunters, order])
 
   // The board follows the live world; it goes when its village does.
   const region = world?.slots.find((slot) => slot.slot === opened?.slot)
@@ -85,9 +99,7 @@ function Page({ world, connected, heard, theme }: Connection & { theme: Theme })
         onOpenVillage={setOpened} onOpenHunter={setReading} onOpenRegion={setPerforming}
         onHunterOrder={onHunterOrder} glanced={glanced} />
       {world && <Prompts world={world} />}
-      {world && (
-        <Margin world={world} heard={heard} order={order} open={glanced} onOpen={setGlancing} onRead={setReading} />
-      )}
+      <Margin hunters={hunters} heard={heard} open={glanced} onOpen={setGlancing} onRead={setReading} />
       {opened && village && (
         <NoticeBoard
           key={`${opened.slot}/${village.slug}`}
@@ -109,15 +121,16 @@ function Page({ world, connected, heard, theme }: Connection & { theme: Theme })
       )}
       {world && hunter && (
         <Journal
-          key={hunter.id}
           hunter={hunter}
+          hunters={hunters}
           bound={boundOf(words, world, hunter)}
+          onTurn={setReading}
           onOpenTerminal={() => setWatching(hunter.id)}
           onClose={() => setReading(undefined)}
         />
       )}
       {terminalHunter && (
-        // Its own key: a sibling keyed like the journal would be taken for it.
+        // Its own key: it is made anew for each hunter, where the chronicle beside it is turned.
         <Suspense key={`terminal/${terminalHunter.id}`}>
           <TerminalView
             hunter={terminalHunter}

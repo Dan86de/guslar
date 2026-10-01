@@ -112,13 +112,19 @@ function Entry({ entry, hunter, row }: { entry: JournalEntry; hunter: Hunter; ro
  */
 export function Journal({
   hunter,
+  hunters,
   bound,
+  onTurn,
   onOpenTerminal,
   onClose,
 }: {
   hunter: Hunter
+  /** Every hunter the chronicle can be turned to, in the order they stand down the map. */
+  hunters: Hunter[]
   /** What the hunter was sent for, and where. */
   bound: { what: string; where: string }
+  /** Turns the chronicle to another hunter, by its id, without closing it. */
+  onTurn: (id: string) => void
   onOpenTerminal: () => void
   onClose: () => void
 }) {
@@ -127,10 +133,15 @@ export function Journal({
   const entries = useRef<HTMLOListElement>(null)
   const heading = useId()
   const refusal = useId()
-  const [draft, setDraft] = useState("")
-  const [sending, setSending] = useState(false)
-  const [problem, setProblem] = useState<string>()
-  const atEnd = useRef(true)
+  // Your reading of each hunter, kept by hunter for as long as the chronicle stands open: the
+  // reply you had begun to it, and where on its page you had got to. Turning to another hunter
+  // leaves both where they were rather than throwing them away, so the chronicle is one surface
+  // turned from hunter to hunter and not a new one opened each time.
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [sending, setSending] = useState<string>()
+  const [problem, setProblem] = useState<{ hunter: string; said: string }>()
+  const places = useRef(new Map<string, { top: number; atEnd: boolean }>())
+  const draft = drafts[hunter.id] ?? ""
   const rows = rowsOf(hunter.journal)
 
   // Only a hunter that has come back goes home: one still out may hold a permission request, and
@@ -146,26 +157,31 @@ export function Journal({
     if (element && !element.open) element.show()
   }, [])
 
-  // New entries keep the journal at its last page, unless you have turned back to read.
+  // New entries keep the journal at its last page, unless you have turned back to read, and a
+  // page turned back to is where the chronicle stands again when you come back to that hunter.
   useLayoutEffect(() => {
     const list = entries.current
-    if (list && atEnd.current) list.scrollTop = list.scrollHeight
-  }, [hunter.journal.length])
+    if (!list) return
+    const place = places.current.get(hunter.id)
+    list.scrollTop = place && !place.atEnd ? place.top : list.scrollHeight
+  }, [hunter.id, hunter.journal.length])
 
   const send = async (event?: SyntheticEvent) => {
     event?.preventDefault()
     const text = draft.trim()
-    if (text === "" || sending) return
-    setSending(true)
+    const { id } = hunter
+    if (text === "" || sending === id) return
+    setSending(id)
     setProblem(undefined)
     const refused = await sendReply(words, hunter, text)
-    setSending(false)
+    setSending(undefined)
     if (refused) {
-      setProblem(refused)
+      setProblem({ hunter: id, said: refused })
       return
     }
-    setDraft("")
-    atEnd.current = true
+    setDrafts((was) => ({ ...was, [id]: "" }))
+    // Written to, a hunter's page follows its words again, wherever you had turned back to.
+    places.current.delete(id)
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -191,6 +207,25 @@ export function Journal({
           <span className="journal-of">{words.journal.of}</span>
           {hunter.name}
         </h2>
+        {/* The index: one name per hunter on the map, in the order they stand down it, as the
+            margin reads. It stands in the head's own space, so the page below it never moves. */}
+        {hunters.length > 1 && (
+          <nav className="journal-index" aria-label={words.journal.journals}>
+            {hunters.map((other) => (
+              <button
+                key={other.id}
+                type="button"
+                className="journal-turn"
+                aria-label={words.journal.turnTo(other.name)}
+                aria-current={other.id === hunter.id ? "page" : undefined}
+                data-current={other.id === hunter.id || undefined}
+                onClick={() => onTurn(other.id)}
+              >
+                {other.name}
+              </button>
+            ))}
+          </nav>
+        )}
         <p className="journal-bound">
           {bound.what}, <span className="journal-village">{bound.where}</span>
         </p>
@@ -243,7 +278,10 @@ export function Journal({
         aria-live="polite"
         onScroll={(event) => {
           const list = event.currentTarget
-          atEnd.current = list.scrollHeight - list.scrollTop - list.clientHeight < 24
+          places.current.set(hunter.id, {
+            top: list.scrollTop,
+            atEnd: list.scrollHeight - list.scrollTop - list.clientHeight < 24,
+          })
         }}
       >
         {hunter.journal.map((entry, index) => (
@@ -254,9 +292,9 @@ export function Journal({
         <p className="journal-outside">{words.journal.outside(hunter.name)}</p>
       ) : (
         <form className="journal-reply" onSubmit={(event) => void send(event)}>
-          {problem && (
+          {problem?.hunter === hunter.id && (
             <p className="journal-problem" role="alert">
-              {problem}
+              {problem.said}
             </p>
           )}
           <textarea
@@ -266,10 +304,10 @@ export function Journal({
             rows={2}
             value={draft}
             autoFocus
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) => setDrafts((was) => ({ ...was, [hunter.id]: event.target.value }))}
             onKeyDown={onKeyDown}
           />
-          <button type="submit" className="journal-send" disabled={sending || draft.trim() === ""}>
+          <button type="submit" className="journal-send" disabled={sending === hunter.id || draft.trim() === ""}>
             {words.journal.send}
           </button>
         </form>

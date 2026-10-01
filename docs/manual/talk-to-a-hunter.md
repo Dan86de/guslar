@@ -3,6 +3,7 @@
 Every hunter on the map stands a leaf in a margin down the map's right edge, saying who it is, how long ago it spoke, and its latest words in two lines, so what everyone is up to is read at a glance with nothing opened.
 A leaf opens under the pointer, and from the keyboard, to the whole of those words and an offer to read that hunter's journal, with the hunter itself marked on the map for as long as it stands open.
 Choosing that offer opens the journal: one surface for reading the hunter's whole session, a reading page wide enough for a table, a diff and a fenced block, with the tool calls of each turn standing on a rail beside the words that called them.
+An index of every hunter on the map stands at its head, and turns it from one to another without closing it, holding on to what you had begun writing to each and the place you had turned back to in its session.
 What the hunter says is set as type in the journal's own hand - headings, lists, tables and code take their shape - so the longer and more structured an answer is, the more readable it gets.
 A line at the journal's foot writes back to that hunter by name, and what you type goes to the session as its next message.
 
@@ -10,6 +11,7 @@ A line at the journal's foot writes back to that hunter by name, and what you ty
 
 - The margin down the map's right edge: one leaf per hunter on the map, saying its latest words.
 - An open leaf's `Read the journal of <hunter name>`, which opens that hunter's journal.
+- The index at the journal's head: one name per hunter on the map, which turns the journal to that hunter.
 - A hunter on the map: its name over its head, or its figure, which opens its journal.
 - The journal's reply box, sent with `Send` or with Enter.
 - The world broadcast on `/ws` (and `/api/world`), which carries every hunter's `"journal"`.
@@ -92,6 +94,21 @@ Run `verify screenshot leaf-read` and `verify screenshot leaf-read-rail --clip 5
 Both of `Bogna`'s turns run down the reading page, and the two `BASH` calls stand on the rail at its right, each beside the words of the turn that made it: the first beside the plan, the second beside the message you sent.
 Run `verify press Escape` to put the journal away.
 
+- **The journal turns from one hunter to another.** Run `verify point "Dobromir"`, which prints `pointing at leaf "Dobromir"`, then `verify click "Read the journal of Dobromir"` and `verify snapshot`.
+At the head of the dialog `Journal of Dobromir` stands a navigation `Journals`, holding one button per hunter on the map, in the order they stand down it: `Turn to Jaromila`, `Turn to Wojmir`, `Turn to Dobromir` and `Turn to Bogna`, each standing as that hunter's name alone.
+Run `verify fill "Reply to Dobromir" "Hold it at 2.4."`, then `verify click "Turn to Wojmir"`, which prints `clicked button "Turn to Wojmir"`, and `verify snapshot`.
+The dialog is `Journal of Wojmir` now, with the same four names in its index: `Wojmir`'s entries run down the reading page with `BASH` and `READ` on the rail beside them, the text box at its foot is `Reply to Wojmir` and holds nothing, and `Send` is disabled.
+Nothing else has moved: the four leaves still stand in the margin behind it, and no second journal is open.
+- **What you were writing is still there.** Run `verify click "Turn to Dobromir"` and `verify snapshot`.
+The dialog is `Journal of Dobromir` again, holding that hunter's entries, and the text box `Reply to Dobromir` still holds `Hold it at 2.4.`, with `Send` enabled: turning away and back is not opening it anew.
+- **The page comes back where you left it.** Run `verify screenshot turn-short --size 1440x420`, which makes the window too short for the conversation.
+Run `verify fill "Reply to Dobromir" "Set it to 2.4."` and `verify press Enter`, then the same two for `And log the readings.` and for `Then close the sluice.`: that session has replayed to its end, so each stands alone as a `You:` entry with nothing answering it, and the page follows them down to the foot, where the fenced block is out of sight above.
+Run `verify press Shift+Tab`, which reaches the fenced block and turns the page back to it, then `verify screenshot turn-place`, `verify click "Turn to Bogna"`, `verify screenshot turn-away`, `verify click "Turn to Dobromir"` and `verify screenshot turn-kept`, and open all three.
+`turn-place` and `turn-kept` are the same page, turned back to the same place: `DOBROMIR` over `The gauge reads depth = 2.4 and the sill is cut from timber = "oak".`, the fenced block under it, `The turn ends.` under that and the first of the three `YOU` lines cut off at the foot, with the rest out of sight below.
+The one difference between them is the rust ring the keyboard left around the block, which is gone in `turn-kept` because the index holds the keyboard instead.
+In `turn-away`, `Bogna`'s own page stands at the foot of its session, where that hunter was left.
+Run `verify screenshot turn-tall --size 1440x900` to put the window back, then `verify press Escape` to put the journal away.
+
 ## Behind it
 
 - **What the claude was sent.** `verify read claude.log`. After its start lines, the claude has `stdin: {"type":"user","message":{"role":"user","content":[{"type":"text","text":"/implement-slice .scratch/slices/drain-the-bog.json S3"}]}}`, then `sent result success` and `waiting for the next message`, then `stdin: {"type":"user","message":{"role":"user","content":[{"type":"text","text":"Oak, from the old grove."}]}}` and `replaying on`, then `sent assistant Edit`, `sent result success` and `replay done`, and last `stdin: {"type":"user","message":{"role":"user","content":[{"type":"text","text":"Pine next time."}]}}`.
@@ -119,4 +136,7 @@ Run `verify press Escape` to put the journal away.
 - One leaf is open at a time: pointing at another leaf, or reaching one with the keyboard, closes the one that was open, and the mark on the map goes with it.
 - An open leaf says the whole of its hunter's latest words, however many lines they take. A session that said a great deal says it inside the leaf, which scrolls rather than running the margin off the map.
 - A leaf stays read-only open: it offers to read the hunter's journal and nothing else, since answering is not a glance.
+- The journal is one surface turned from hunter to hunter, not one opened anew for each: what you had begun writing to a hunter, and the place you had turned back to in its session, are both still there when you come back to it. Closing the journal lets them go.
+- The index stands only while more than one hunter is on the map, since with one there is nowhere to turn to, and it stands in the head's own space, so turning from hunter to hunter never moves the reading page under it.
+- A hunter written to follows its words again: the page goes back to the foot and stays there as the session answers, wherever you had turned back to before you wrote.
 - Text that merely looks like markdown is set as markdown. A line that happens to start with a hash, or a stray run of pipes in a log, takes a shape the hunter did not intend; its characters survive, but its form may surprise.
