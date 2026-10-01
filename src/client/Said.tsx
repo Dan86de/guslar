@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { parse, type Block, type Span } from "./markdown.js"
 
 /**
@@ -36,6 +36,49 @@ function setSpans(spans: Span[]): ReactNode {
   })
 }
 
+/**
+ * A fenced block. It never widens the leaf: its lines keep the breaks the hunter gave them and the
+ * block scrolls sideways inside itself.
+ *
+ * What it cannot show says so, with a shadow inside the edge there is more beyond, and a block
+ * with anything to scroll to is a tab stop: a reader who cannot point at it has no other way to
+ * reach the rest of a line. A block that fits is neither, so a journal of short fences neither
+ * casts shadows nor fills the tab order with blocks that go nowhere.
+ */
+function Fence({ text }: { text: string }) {
+  const fence = useRef<HTMLPreElement>(null)
+  const [more, setMore] = useState({ before: false, after: false })
+  useEffect(() => {
+    const element = fence.current
+    if (!element) return
+    const measure = () => {
+      const room = element.scrollWidth - element.clientWidth
+      const before = element.scrollLeft > 0
+      const after = element.scrollLeft < room - 1
+      setMore((was) => (was.before === before && was.after === after ? was : { before, after }))
+    }
+    measure()
+    const watch = new ResizeObserver(measure)
+    watch.observe(element)
+    element.addEventListener("scroll", measure, { passive: true })
+    return () => {
+      watch.disconnect()
+      element.removeEventListener("scroll", measure)
+    }
+  }, [text])
+  return (
+    <pre
+      ref={fence}
+      className="said-fence"
+      tabIndex={more.before || more.after ? 0 : undefined}
+      data-more-before={more.before || undefined}
+      data-more-after={more.after || undefined}
+    >
+      <code>{text}</code>
+    </pre>
+  )
+}
+
 /** One block as its element. Every heading takes one form: depth reads from the rule under it. */
 function setBlock(block: Block, key: number): ReactNode {
   switch (block.kind) {
@@ -64,11 +107,7 @@ function setBlock(block: Block, key: number): ReactNode {
       )
     }
     case "code":
-      return (
-        <pre key={key} className="said-fence">
-          <code>{block.text}</code>
-        </pre>
-      )
+      return <Fence key={key} text={block.text} />
     case "quote":
       return (
         <blockquote key={key} className="said-quote">

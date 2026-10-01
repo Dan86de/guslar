@@ -983,11 +983,15 @@ button.plaque:focus-visible {
   margin-top: 0.2em;
 }
 
-/* Code, inline and fenced: the one thing in the leaf not set in the book face. */
+/* Code, inline and fenced: the one thing in the leaf not set in the book face. Its figures are
+   lining, so none drops below the baseline as the book face's do, and nothing is joined into a
+   ligature, so an identifier reads as the characters the hunter wrote. */
 .said-code,
 .said-fence code {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 0.8em;
+  font-variant-numeric: lining-nums;
+  font-variant-ligatures: none;
 }
 
 .said-code {
@@ -998,16 +1002,35 @@ button.plaque:focus-visible {
 
 /* A fenced block stands on paper of its own and scrolls sideways rather than widening the leaf. */
 .said-fence {
+  --fence-before: 0 0 transparent;
+  --fence-after: 0 0 transparent;
+
   padding: 5px 8px;
   overflow-x: auto;
   background: color-mix(in srgb, var(--ink) 7%, transparent);
   border-left: 2px solid color-mix(in srgb, var(--ink) 35%, transparent);
+  box-shadow: var(--fence-before), var(--fence-after);
   scrollbar-width: thin;
   scrollbar-color: var(--bog) transparent;
 }
 
 .said-fence code {
   white-space: pre;
+}
+
+/* The side a fence has more on carries a shadow, inside its own edge so it never crosses the
+   leaf's inner rule, and the shadow goes as the scrolling reaches that end. */
+.said-fence[data-more-before] {
+  --fence-before: inset 14px 0 12px -12px color-mix(in srgb, var(--ink) 55%, transparent);
+}
+
+.said-fence[data-more-after] {
+  --fence-after: inset -14px 0 12px -12px color-mix(in srgb, var(--ink) 55%, transparent);
+}
+
+.said-fence:focus-visible {
+  outline: 1px solid var(--rust);
+  outline-offset: 1px;
 }
 
 /* A quotation leans in behind a rule of its own, in the italic face the journal now loads. */
