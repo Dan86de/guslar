@@ -214,6 +214,11 @@ async function accessibleName(locator) {
   return /^- button "(.*)"/.exec(snapshot)?.[1] ?? snapshot
 }
 
+/** Who a leaf in the margin is for: the hunter's name, the first line it reads. */
+async function leafWho(locator) {
+  return ((await locator.locator("p").first().textContent()) ?? "").trim()
+}
+
 async function textboxName(locator) {
   const snapshot = await locator.ariaSnapshot()
   return /^- textbox "(.*?)"/.exec(snapshot)?.[1] ?? snapshot
@@ -529,6 +534,25 @@ const commands = {
       await buttons.click()
       await page.waitForTimeout(500)
       out(`clicked button "${full}"`)
+    })
+  },
+
+  async point(flags, [name]) {
+    const run = runDir(flags)
+    if (!name) throw new Refusal("say what to point at: point <words in a leaf of the margin>")
+    return withPage(run, async (page) => {
+      const leaves = page.getByRole("article")
+      const matching = leaves.filter({ hasText: name })
+      const count = await matching.count()
+      if (count !== 1) {
+        out(count === 0 ? `no leaf holds "${name}"` : `${count} leaves hold "${name}"; name one of them alone`)
+        for (const leaf of await leaves.all()) out(`  leaf: ${await leafWho(leaf)}`)
+        return 1
+      }
+      const who = await leafWho(matching)
+      await matching.hover()
+      await page.waitForTimeout(500)
+      out(`pointing at leaf "${who}"`)
     })
   },
 

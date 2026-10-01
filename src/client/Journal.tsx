@@ -1,7 +1,15 @@
-import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type SyntheticEvent } from "react"
+import { useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type SyntheticEvent } from "react"
+import { Said } from "./Said.js"
+import { everyoneSaid } from "./heard.js"
 import { isReturned, type Hunter, type JournalEntry, type ReplyRequest } from "../shared/world.js"
 import { whyRefused } from "./refused.js"
 import { sayRefusal, useWords, type Words } from "./words/index.js"
+
+/**
+ * What the chronicle is turned to when it is turned to everyone rather than to one hunter. A
+ * hunter's id is a UUID, so nothing on the map can ever answer to this.
+ */
+export const EVERYONE = "everyone"
 
 /** Sends a reply to the server, and returns why it was refused, or nothing when the hunter got it. */
 async function sendReply(words: Words, hunter: Hunter, text: string): Promise<string | undefined> {
@@ -34,32 +42,69 @@ function sendHome(hunter: Hunter): void {
   }).catch(() => undefined)
 }
 
-function Entry({ entry, hunter }: { entry: JournalEntry; hunter: Hunter }) {
+/**
+ * Which row of the chronicle each entry stands on, the reading page and the rail being its two
+ * columns. Everything the hunter and you said takes the next row of the page, so the reading runs
+ * on unbroken; a tool call takes the row of the words it followed, or the next row down the rail
+ * when that row is already spoken for, so a turn's calls stand beside the turn that made them, in
+ * the order it made them, and never above the words that led to them.
+ */
+function rowsOf(entries: JournalEntry[]): number[] {
+  const rows: number[] = []
+  let page = 0
+  let rail = 0
+  for (const entry of entries) {
+    if (entry.kind === "tool") {
+      rail = Math.max(page, rail + 1)
+      rows.push(rail)
+    } else {
+      page += 1
+      rows.push(page)
+    }
+  }
+  return rows
+}
+
+function Entry({
+  entry,
+  hunter,
+  row,
+  everyone,
+}: {
+  entry: JournalEntry
+  hunter: Hunter
+  row: number
+  /** In the stream of everyone, where a line has to say which hunter it is of. */
+  everyone?: boolean
+}) {
   const words = useWords()
+  const style = { gridRow: String(row) }
   switch (entry.kind) {
     case "you":
       return (
-        <li className="entry" data-kind="you">
+        <li className="entry" data-kind="you" style={style}>
           <span className="entry-who">
-            {words.journal.you}
+            {everyone ? words.journal.youTo(hunter.name) : words.journal.you}
             <span className="entry-colon">:</span>
           </span>
           <span className="entry-text">{entry.text}</span>
         </li>
       )
     case "said":
+      // A hunter's words are the one text here that is set as type. What you typed and what a tool
+      // was given are shown as they were written, since neither was written as markdown.
       return (
-        <li className="entry" data-kind="said">
+        <li className="entry" data-kind="said" style={style}>
           <span className="entry-who">
             {hunter.name}
             <span className="entry-colon">:</span>
           </span>
-          <span className="entry-text">{entry.text}</span>
+          <Said text={entry.text} />
         </li>
       )
     case "tool":
       return (
-        <li className="entry" data-kind="tool">
+        <li className="entry" data-kind="tool" style={style}>
           <span className="entry-tool">
             {entry.tool}
             <span className="entry-colon">:</span>
@@ -69,7 +114,7 @@ function Entry({ entry, hunter }: { entry: JournalEntry; hunter: Hunter }) {
       )
     case "result":
       return (
-        <li className="entry" data-kind="result" data-error={entry.error ? "" : undefined}>
+        <li className="entry" data-kind="result" data-error={entry.error ? "" : undefined} style={style}>
           {entry.error ? words.journal.turnFails(entry.text) : words.journal.turnEnds}
         </li>
       )
@@ -77,19 +122,35 @@ function Entry({ entry, hunter }: { entry: JournalEntry; hunter: Hunter }) {
 }
 
 /**
- * A hunter's journal: its conversation and tool calls as they arrive, and a line to write back to
- * it. It stands beside the map rather than over it, so the hunter can still be watched. A session
- * started outside Guslar is read here and written to in its own terminal.
+ * A hunter's chronicle: one surface for reading its whole session, opened from its leaf in the
+ * margin. The turns run down a reading page wide enough for a table, a diff and a fenced block,
+ * the tool calls of each turn stand on a rail beside it, and a line at the foot writes back to
+ * that hunter by name. A session started outside Guslar is read here and written to in its own
+ * terminal.
+ *
+ * The index at its head turns it to everyone as well as to one hunter: everyone's turns in one
+ * stream, in the order this map heard them, with no line to write back on, since the stream is
+ * nobody's and there is nobody in particular in it to write to.
  */
 export function Journal({
   hunter,
+  hunters,
+  told,
   bound,
+  onTurn,
   onOpenTerminal,
   onClose,
 }: {
-  hunter: Hunter
-  /** What the hunter was sent for, and where. */
-  bound: { what: string; where: string }
+  /** The hunter being read, or nothing while the chronicle is turned to everyone. */
+  hunter: Hunter | undefined
+  /** Every hunter the chronicle can be turned to, in the order they stand down the map. */
+  hunters: Hunter[]
+  /** The order this map heard each entry of each hunter's journal in, by the hunter's id. */
+  told: Map<string, number[]>
+  /** What the hunter was sent for, and where; nothing in the stream of everyone. */
+  bound: { what: string; where: string } | undefined
+  /** Turns the chronicle to another hunter, by its id, or to everyone, without closing it. */
+  onTurn: (id: string) => void
   onOpenTerminal: () => void
   onClose: () => void
 }) {
@@ -98,15 +159,28 @@ export function Journal({
   const entries = useRef<HTMLOListElement>(null)
   const heading = useId()
   const refusal = useId()
-  const [draft, setDraft] = useState("")
-  const [sending, setSending] = useState(false)
-  const [problem, setProblem] = useState<string>()
-  const atEnd = useRef(true)
+  // Your reading of each hunter, kept by hunter for as long as the chronicle stands open: the
+  // reply you had begun to it, and where on its page you had got to. Turning to another hunter
+  // leaves both where they were rather than throwing them away, so the chronicle is one surface
+  // turned from hunter to hunter and not a new one opened each time.
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [sending, setSending] = useState<string>()
+  const [problem, setProblem] = useState<{ hunter: string; said: string }>()
+  const places = useRef(new Map<string, { top: number; atEnd: boolean }>())
+  // Which page the chronicle is turned to: a hunter's id, or everyone, which has a page of its own
+  // and so a place of its own to come back to.
+  const at = hunter?.id ?? EVERYONE
+  const draft = hunter ? (drafts[hunter.id] ?? "") : ""
+  const rows = hunter ? rowsOf(hunter.journal) : []
+  // Everyone's turns are merged on every world update, which is as often as a hunter's own page is
+  // drawn again; the work is one pass over journals already in hand.
+  const stream = useMemo(() => (hunter ? [] : everyoneSaid(hunters, told)), [hunter, hunters, told])
+  const shown = hunter ? hunter.journal.length : stream.length
 
   // Only a hunter that has come back goes home: one still out may hold a permission request, and
   // letting go of an unanswered request is read by its hook as Guslar being gone, which allows it.
-  const back = isReturned(hunter)
-  const stillOut = sayRefusal(words, { reason: "still-out", hunter: hunter.name })
+  const back = hunter !== undefined && isReturned(hunter)
+  const stillOut = sayRefusal(words, { reason: "still-out", hunter: hunter?.name ?? "" })
 
   // A layout effect, not a passive one: React runs every layout effect before any passive effect,
   // so showing the dialog here is what lets the effect below measure it. Shown passively, it is
@@ -116,26 +190,32 @@ export function Journal({
     if (element && !element.open) element.show()
   }, [])
 
-  // New entries keep the journal at its last page, unless you have turned back to read.
+  // New entries keep the journal at its last page, unless you have turned back to read, and a
+  // page turned back to is where the chronicle stands again when you come back to that hunter.
   useLayoutEffect(() => {
     const list = entries.current
-    if (list && atEnd.current) list.scrollTop = list.scrollHeight
-  }, [hunter.journal.length])
+    if (!list) return
+    const place = places.current.get(at)
+    list.scrollTop = place && !place.atEnd ? place.top : list.scrollHeight
+  }, [at, shown])
 
   const send = async (event?: SyntheticEvent) => {
     event?.preventDefault()
     const text = draft.trim()
-    if (text === "" || sending) return
-    setSending(true)
+    if (!hunter) return
+    const { id } = hunter
+    if (text === "" || sending === id) return
+    setSending(id)
     setProblem(undefined)
     const refused = await sendReply(words, hunter, text)
-    setSending(false)
+    setSending(undefined)
     if (refused) {
-      setProblem(refused)
+      setProblem({ hunter: id, said: refused })
       return
     }
-    setDraft("")
-    atEnd.current = true
+    setDrafts((was) => ({ ...was, [id]: "" }))
+    // Written to, a hunter's page follows its words again, wherever you had turned back to.
+    places.current.delete(id)
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -148,7 +228,8 @@ export function Journal({
       ref={dialog}
       className="journal"
       aria-labelledby={heading}
-      data-state={hunter.state}
+      data-state={hunter?.state}
+      data-everyone={hunter ? undefined : ""}
       onClose={(event) => {
         if (event.target === event.currentTarget) onClose()
       }}
@@ -159,49 +240,82 @@ export function Journal({
       <header className="journal-head">
         <h2 id={heading} className="journal-heading">
           <span className="journal-of">{words.journal.of}</span>
-          {hunter.name}
+          {hunter?.name ?? words.journal.everyone}
         </h2>
-        <p className="journal-bound">
-          {bound.what}, <span className="journal-village">{bound.where}</span>
-        </p>
-        <div className="journal-status">
-          <p className="journal-state">{words.hunter.states[hunter.state]}</p>
-          <div className="journal-acts">
-            {!hunter.outside && (
+        {/* The index: everyone, then one name per hunter on the map, in the order they stand down
+            it, as the margin reads. It stands in the head's own space, so the page never moves. */}
+        {hunters.length > 1 && (
+          <nav className="journal-index" aria-label={words.journal.journals}>
+            <button
+              type="button"
+              className="journal-turn"
+              aria-label={words.journal.turnToEveryone}
+              aria-current={hunter ? undefined : "page"}
+              data-current={hunter ? undefined : true}
+              onClick={() => onTurn(EVERYONE)}
+            >
+              {words.journal.everyone}
+            </button>
+            {hunters.map((other) => (
+              <button
+                key={other.id}
+                type="button"
+                className="journal-turn"
+                aria-label={words.journal.turnTo(other.name)}
+                aria-current={other.id === hunter?.id ? "page" : undefined}
+                data-current={other.id === hunter?.id || undefined}
+                onClick={() => onTurn(other.id)}
+              >
+                {other.name}
+              </button>
+            ))}
+          </nav>
+        )}
+        {hunter && bound && (
+          <p className="journal-bound">
+            {bound.what}, <span className="journal-village">{bound.where}</span>
+          </p>
+        )}
+        {hunter && (
+          <div className="journal-status">
+            <p className="journal-state">{words.hunter.states[hunter.state]}</p>
+            <div className="journal-acts">
+              {!hunter.outside && (
+                <button
+                  type="button"
+                  className="journal-act"
+                  disabled={!hunter.sessionId}
+                  title={hunter.sessionId ? undefined : sayRefusal(words, { reason: "not-begun", hunter: hunter.name })}
+                  onClick={onOpenTerminal}
+                >
+                  {words.journal.openTerminal}
+                </button>
+              )}
               <button
                 type="button"
                 className="journal-act"
-                disabled={!hunter.sessionId}
-                title={hunter.sessionId ? undefined : sayRefusal(words, { reason: "not-begun", hunter: hunter.name })}
-                onClick={onOpenTerminal}
+                disabled={!back}
+                title={back ? undefined : stillOut}
+                // A title is read by a pointer alone, so the same words stand in the page for the
+                // button's description, as the only thing that says why it is refused.
+                aria-describedby={back ? undefined : refusal}
+                onClick={() => {
+                  // The journal closes first, so focus goes back to whatever opened it. Left to the
+                  // hunter leaving the world, the leaf would be torn out with no close at all.
+                  dialog.current?.close()
+                  sendHome(hunter)
+                }}
               >
-                {words.journal.openTerminal}
+                {words.journal.sendHome}
               </button>
-            )}
-            <button
-              type="button"
-              className="journal-act"
-              disabled={!back}
-              title={back ? undefined : stillOut}
-              // A title is read by a pointer alone, so the same words stand in the page for the
-              // button's description, as the only thing that says why it is refused.
-              aria-describedby={back ? undefined : refusal}
-              onClick={() => {
-                // The journal closes first, so focus goes back to whatever opened it. Left to the
-                // hunter leaving the world, the leaf would be torn out with no close at all.
-                dialog.current?.close()
-                sendHome(hunter)
-              }}
-            >
-              {words.journal.sendHome}
-            </button>
-            {!back && (
-              <p id={refusal} className="visually-hidden">
-                {stillOut}
-              </p>
-            )}
+              {!back && (
+                <p id={refusal} className="visually-hidden">
+                  {stillOut}
+                </p>
+              )}
+            </div>
           </div>
-        </div>
+        )}
         <button type="button" className="journal-close" aria-label={words.journal.close} onClick={() => dialog.current?.close()}>
           {words.close}
         </button>
@@ -213,37 +327,47 @@ export function Journal({
         aria-live="polite"
         onScroll={(event) => {
           const list = event.currentTarget
-          atEnd.current = list.scrollHeight - list.scrollTop - list.clientHeight < 24
+          places.current.set(at, {
+            top: list.scrollTop,
+            atEnd: list.scrollHeight - list.scrollTop - list.clientHeight < 24,
+          })
         }}
       >
-        {hunter.journal.map((entry, index) => (
-          <Entry key={index} entry={entry} hunter={hunter} />
-        ))}
+        {hunter
+          ? hunter.journal.map((entry, index) => (
+              <Entry key={index} entry={entry} hunter={hunter} row={rows[index] ?? index + 1} />
+            ))
+          : stream.map((turn, index) => (
+              <Entry key={`${turn.hunter.id}/${turn.told}`} entry={turn.entry} hunter={turn.hunter} row={index + 1} everyone />
+            ))}
       </ol>
-      {hunter.outside ? (
-        <p className="journal-outside">{words.journal.outside(hunter.name)}</p>
-      ) : (
-        <form className="journal-reply" onSubmit={(event) => void send(event)}>
-          {problem && (
-            <p className="journal-problem" role="alert">
-              {problem}
-            </p>
-          )}
-          <textarea
-            className="journal-draft"
-            aria-label={words.journal.reply(hunter.name)}
-            placeholder={words.journal.draft(hunter.name)}
-            rows={2}
-            value={draft}
-            autoFocus
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={onKeyDown}
-          />
-          <button type="submit" className="journal-send" disabled={sending || draft.trim() === ""}>
-            {words.journal.send}
-          </button>
-        </form>
-      )}
+      {/* The stream of everyone has no line to write back on: there is nobody in particular in it
+          to write to. A session started outside Guslar says why it has none instead. */}
+      {hunter &&
+        (hunter.outside ? (
+          <p className="journal-outside">{words.journal.outside(hunter.name)}</p>
+        ) : (
+          <form className="journal-reply" onSubmit={(event) => void send(event)}>
+            {problem?.hunter === hunter.id && (
+              <p className="journal-problem" role="alert">
+                {problem.said}
+              </p>
+            )}
+            <textarea
+              className="journal-draft"
+              aria-label={words.journal.reply(hunter.name)}
+              placeholder={words.journal.draft(hunter.name)}
+              rows={2}
+              value={draft}
+              autoFocus
+              onChange={(event) => setDrafts((was) => ({ ...was, [hunter.id]: event.target.value }))}
+              onKeyDown={onKeyDown}
+            />
+            <button type="submit" className="journal-send" disabled={sending === hunter.id || draft.trim() === ""}>
+              {words.journal.send}
+            </button>
+          </form>
+        ))}
     </dialog>
   )
 }

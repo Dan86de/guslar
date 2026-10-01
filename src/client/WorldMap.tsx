@@ -53,6 +53,17 @@ function hunterPlaces(world: WorldState, aspect: number): HunterPlace[] {
 /** How far apart two hunters on the same ground stand, as a share of their height: a figure's width and a little. */
 const SIDE_BY_SIDE = 0.75
 
+/**
+ * Every hunter's id in the order its figure stands down the map, top to bottom and then left to
+ * right. Only the map knows it: where a hunter stands is laid out from its region, its village and
+ * the village art's own shape, and nothing of that reaches the broadcast.
+ */
+function hunterOrder(world: WorldState, aspect: number): string[] {
+  return hunterPlaces(world, aspect)
+    .sort((one, other) => one.at.y - other.at.y || one.at.x - other.at.x)
+    .map((place) => place.hunter.id)
+}
+
 /** A village the user opened: its region's slot and the spec's slug. */
 export type VillageRef = { slot: RegionSlot; slug: string }
 
@@ -71,6 +82,8 @@ export function WorldMap({
   onOpenVillage,
   onOpenHunter,
   onOpenRegion,
+  onHunterOrder,
+  glanced,
 }: {
   /** The theme the map is painted in, for as long as it is mounted. */
   theme: Theme
@@ -80,6 +93,10 @@ export function WorldMap({
   onOpenHunter: (id: string) => void
   /** Opens a region's rites, by its slot. */
   onOpenRegion: (slot: RegionSlot) => void
+  /** Says the order the hunters stand in down the map, whenever it changes. */
+  onHunterOrder: (ids: string[]) => void
+  /** The hunter whose leaf in the margin is open, marked on the map for as long as it is. */
+  glanced: string | undefined
 }) {
   const words = useWords()
   const host = useRef<HTMLDivElement>(null)
@@ -279,7 +296,8 @@ export function WorldMap({
   useEffect(() => {
     if (!scene || !world) return
     scene.show(world)
-  }, [scene, world])
+    onHunterOrder(hunterOrder(world, scene.villageAspect))
+  }, [scene, world, onHunterOrder])
 
   const ready = Boolean(scene && world && view)
 
@@ -304,7 +322,13 @@ export function WorldMap({
             })}
           </ul>
           <VillageList world={world} view={view} aspect={scene.villageAspect} onOpen={onOpenVillage} />
-          <HunterList world={world} view={view} aspect={scene.villageAspect} onOpen={onOpenHunter} />
+          <HunterList
+            world={world}
+            view={view}
+            aspect={scene.villageAspect}
+            onOpen={onOpenHunter}
+            glanced={glanced}
+          />
           <ul className="slots" aria-label={words.map.regionRites}>
             {world.slots.map((slot) => {
               if (slot.kind !== "region") return null
@@ -383,17 +407,22 @@ function VillageList({
  * Each hunter's name over its painted figure's head, following it as it rides, with its state and
  * what it is out for said in words for anyone who cannot see the pose. The name and the figure under it
  * are one button, named by the hunter, which opens its journal.
+ *
+ * The hunter whose leaf in the margin is open is marked here, so reading a leaf says on the world
+ * which figure it is about.
  */
 function HunterList({
   world,
   view,
   aspect,
   onOpen,
+  glanced,
 }: {
   world: WorldState
   view: View
   aspect: number
   onOpen: (id: string) => void
+  glanced: string | undefined
 }) {
   const words = useWords()
   const places = hunterPlaces(world, aspect)
@@ -408,7 +437,13 @@ function HunterList({
           "--figure-height": `${height * view.scale}px`,
         }
         return (
-          <li key={hunter.id} className="hunter" style={style} data-state={hunter.state}>
+          <li
+            key={hunter.id}
+            className="hunter"
+            style={style}
+            data-state={hunter.state}
+            data-glanced={hunter.id === glanced || undefined}
+          >
             {/* Named by the hunter alone, so a village's name opens only its village. */}
             <button
               type="button"

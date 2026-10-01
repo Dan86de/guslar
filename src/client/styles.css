@@ -10,6 +10,10 @@
   /* The lit parchment of a field or a hovered plaque. */
   --glint: #fffaeb;
   --bone-lit: #eee3c6;
+  /* How wide the chronicle stands: a reading page and the rail of tool calls beside it, which is
+     what a table, a diff and a fenced block are asked to fit in. The terminal along the map's foot
+     reads it too, so it stops short of the chronicle wherever the chronicle ends. */
+  --chronicle: min(880px, calc(100vw - 32px));
   font-family: "IM Fell English", Georgia, serif;
 }
 
@@ -715,6 +719,14 @@ button.plaque:focus-visible {
   box-shadow: inset 0 0 0 1px var(--rust);
 }
 
+/* The hunter whose leaf in the margin is open: its name on rust, so a glance at a leaf says
+   which figure on the map it is about. */
+.hunter[data-glanced] .hunter-name {
+  color: var(--bone);
+  background: var(--rust);
+  border-color: var(--rust);
+}
+
 /* The name and the figure under it open the hunter's journal. */
 .hunter-open {
   position: relative;
@@ -749,12 +761,14 @@ button.plaque:focus-visible {
   outline: none;
 }
 
-/* The journal: a parchment leaf beside the map, the conversation in ink, a line to write back. */
+/* The chronicle: one surface for reading a hunter's session, in parchment over the map's right
+   edge. The turns run down a reading page and the tool calls of each turn stand on a rail beside
+   it, so the work a turn did is read without breaking the words it did them for. */
 
 .journal {
   position: fixed;
   inset: 16px 16px 16px auto;
-  width: min(420px, calc(100vw - 32px));
+  width: var(--chronicle);
   height: auto;
   max-height: none;
   margin: 0;
@@ -778,7 +792,7 @@ button.plaque:focus-visible {
 
 .journal-head {
   position: relative;
-  padding: 12px 16px 12px;
+  padding: 12px 24px 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
 }
 
@@ -872,7 +886,7 @@ button.plaque:focus-visible {
 
 .journal-close {
   position: absolute;
-  right: 12px;
+  right: 20px;
   top: 12px;
   padding: 0.15em 0.8em 0.25em;
   color: var(--bone);
@@ -890,19 +904,83 @@ button.plaque:focus-visible {
   outline: none;
 }
 
+/* The index of hunters at the head's right, under the close: one name per hunter on the map, in
+   the order they stand down it, the one being read marked in rust. It stands in the head's own
+   free band, out of the flow, so turning the chronicle from one hunter to another never moves the
+   reading page under it by a pixel. */
+.journal-index {
+  position: absolute;
+  right: 20px;
+  /* In the clear strip between the close and the line below the name: out of the flow, it cannot
+     push the page down, and standing above that line it is not run into by a long one. */
+  top: 40px;
+  display: flex;
+  gap: 14px;
+  max-width: 50%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bog) transparent;
+}
+
+.journal-turn {
+  padding: 0 0 0.15em;
+  color: color-mix(in srgb, var(--ink) 62%, transparent);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  cursor: pointer;
+}
+
+.journal-turn:hover,
+.journal-turn:focus-visible {
+  color: var(--rust);
+  border-bottom-color: var(--rust);
+  outline: none;
+}
+
+/* The page you are on: in full ink, ruled under in rust, and nowhere to turn to. */
+.journal-turn[data-current] {
+  color: var(--ink);
+  border-bottom-color: var(--rust);
+  cursor: default;
+}
+
+/* The reading page and the rail, as two columns of one grid: every entry but a tool call takes the
+   next row of the page, so the reading runs on unbroken, and a tool call takes the row of the words
+   it followed, or the next row down the rail when that row is already spoken for. The rows come
+   from the markup, which knows where each turn begins and ends; the columns are here. */
 .journal-entries {
+  --rail: 216px;
   flex: 1;
   min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail);
+  align-content: start;
+  gap: 12px 24px;
   margin: 0;
-  padding: 14px 16px;
+  padding: 16px 24px;
   overflow: hidden auto;
   list-style: none;
   scrollbar-width: thin;
   scrollbar-color: var(--bog) transparent;
 }
 
-.entry + .entry {
-  margin-top: 10px;
+/* Turned to everyone, the chronicle has no rail: a tool call is a hunter's own work, read on its
+   own page beside the words that called it, so the stream is words alone and they take the whole
+   width of the surface. */
+.journal[data-everyone] .journal-entries {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* A page entry never strays into the rail, whatever row it is on. */
+.entry {
+  grid-column: 1;
+  min-width: 0;
 }
 
 .entry-who {
@@ -920,6 +998,169 @@ button.plaque:focus-visible {
   overflow-wrap: anywhere;
 }
 
+/* A hunter's words, set as type in the plaques' hand rather than printed with their marks. This is
+   the `said` entry alone: what you typed and what a tool was given keep every character. */
+.said {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55em;
+  min-width: 0;
+  margin-top: 2px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+/* Blocks stand apart by the gap above, so none brings a margin of its own, and none may widen the
+   leaf: a fence scrolls inside itself instead. */
+.said > * {
+  margin: 0;
+  min-width: 0;
+}
+
+/* Every heading takes one form, whatever its depth: small capitals over a hairline. It is set a
+   size above the small capitals that name who spoke, so the first one is read as a heading and not
+   as a second label. */
+.said-heading {
+  padding-bottom: 2px;
+  font-size: 14px;
+  font-weight: normal;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
+}
+
+/* A heading takes more air above it than below, as a heading does on any page. */
+.said-heading:not(:first-child) {
+  margin-top: 0.35em;
+}
+
+/* A hunter's own line breaks are kept: how it broke its lines is part of what it said. */
+.said-paragraph,
+.said-quote {
+  white-space: pre-wrap;
+}
+
+/* Bold is a low wash behind full-strength ink: a display serif smears when the browser fakes it,
+   and small capitals would read as a heading instead of as emphasis. */
+.said-strong {
+  padding: 0 0.15em;
+  font-weight: normal;
+  background: color-mix(in srgb, var(--rust) 16%, transparent);
+  border-radius: 1px;
+}
+
+.said-list {
+  padding-left: 1.3em;
+}
+
+.said-list li::marker {
+  color: var(--rust);
+}
+
+.said-list li + li {
+  margin-top: 0.2em;
+}
+
+/* Code, inline and fenced: the one thing in the leaf not set in the book face. Its figures are
+   lining, so none drops below the baseline as the book face's do, and nothing is joined into a
+   ligature, so an identifier reads as the characters the hunter wrote. */
+.said-code,
+.said-fence code {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.8em;
+  font-variant-numeric: lining-nums;
+  font-variant-ligatures: none;
+}
+
+.said-code {
+  padding: 0 0.2em;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  border-radius: 1px;
+}
+
+/* A fenced block stands on paper of its own and scrolls sideways rather than widening the leaf. */
+.said-fence {
+  --fence-before: 0 0 transparent;
+  --fence-after: 0 0 transparent;
+
+  padding: 5px 8px;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  border-left: 2px solid color-mix(in srgb, var(--ink) 35%, transparent);
+  box-shadow: var(--fence-before), var(--fence-after);
+  scrollbar-width: thin;
+  scrollbar-color: var(--bog) transparent;
+}
+
+.said-fence code {
+  white-space: pre;
+}
+
+/* The side a fence has more on carries a shadow, inside its own edge so it never crosses the
+   leaf's inner rule, and the shadow goes as the scrolling reaches that end. */
+.said-fence[data-more-before] {
+  --fence-before: inset 14px 0 12px -12px color-mix(in srgb, var(--ink) 55%, transparent);
+}
+
+.said-fence[data-more-after] {
+  --fence-after: inset -14px 0 12px -12px color-mix(in srgb, var(--ink) 55%, transparent);
+}
+
+.said-fence:focus-visible {
+  outline: 1px solid var(--rust);
+  outline-offset: 1px;
+}
+
+/* A quotation leans in behind a rule of its own, in the italic face the journal now loads. */
+.said-quote {
+  padding-left: 10px;
+  color: color-mix(in srgb, var(--ink) 72%, transparent);
+  font-style: italic;
+  border-left: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
+}
+
+/* A table in hairlines, its head in small capitals. */
+.said-table {
+  width: 100%;
+  font-size: 0.9em;
+  border-collapse: collapse;
+}
+
+.said-table th,
+.said-table td {
+  padding: 2px 8px 2px 0;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+}
+
+.said-table th {
+  font-size: 0.85em;
+  font-weight: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-bottom-color: color-mix(in srgb, var(--ink) 45%, transparent);
+}
+
+.said-table tr:last-child td {
+  border-bottom: 0;
+}
+
+/* A rule the hunter drew, kept short so it is never taken for one of the leaf's own. */
+.said-rule {
+  align-self: center;
+  width: 40%;
+  height: 0;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
+}
+
+/* A link is said, not offered: there is nothing here to follow, and the dots say as much. */
+.said-link {
+  text-decoration: underline dotted color-mix(in srgb, var(--ink) 45%, transparent);
+  text-underline-offset: 2px;
+}
+
 /* What you sent sits apart, on a darker leaf with a rust rule. */
 .entry[data-kind="you"] {
   padding: 6px 10px 8px;
@@ -931,19 +1172,19 @@ button.plaque:focus-visible {
   color: var(--rust);
 }
 
-/* A tool call is a margin note: the tool in small capitals, what it was given in monospace. */
+/* A tool call stands on the rail, behind a hairline at its left: the tool in small capitals over
+   what it was given in monospace, since the rail is too narrow to set the two side by side. */
 .entry[data-kind="tool"] {
+  grid-column: 2;
   display: flex;
-  gap: 8px;
-  align-items: baseline;
-  margin-left: 10px;
-  padding-left: 10px;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 12px;
   color: color-mix(in srgb, var(--ink) 78%, transparent);
   border-left: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
 }
 
 .entry-tool {
-  flex-shrink: 0;
   font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -985,14 +1226,14 @@ button.plaque:focus-visible {
   grid-template-columns: 1fr auto;
   gap: 8px;
   align-items: end;
-  padding: 12px 16px 12px;
+  padding: 12px 24px 12px;
   border-top: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
 }
 
 /* Where the reply line would be: an outside session is written to in its own terminal. */
 .journal-outside {
   margin: 0;
-  padding: 14px 16px;
+  padding: 14px 24px;
   border-top: 1px solid color-mix(in srgb, var(--ink) 35%, transparent);
   font-size: 16px;
   font-style: italic;
@@ -1058,6 +1299,138 @@ button.plaque:focus-visible {
 /* The colon after a label is for anyone reading the journal as text; it stays inline, so no space comes before it. */
 .entry-colon {
   font-size: 0;
+}
+
+/* The margin: a leaf for each hunter down the map's right edge, its latest words at a glance. */
+
+.margin {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  width: min(280px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: hidden auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bog) transparent;
+}
+
+.leaf {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  align-items: baseline;
+  padding: 8px 12px 10px;
+  color: var(--ink);
+  background: var(--bone);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  box-shadow: 3px 5px 12px rgb(0 0 0 / 0.45);
+}
+
+/* The hunter that spoke most recently, marked by a rust edge down the leaf and a lighter leaf. */
+.leaf[data-marked] {
+  background: var(--bone-lit);
+  border-color: var(--rust);
+  box-shadow:
+    inset 3px 0 0 var(--rust),
+    3px 5px 12px rgb(0 0 0 / 0.45);
+}
+
+.leaf-who {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.leaf-when {
+  margin: 0;
+  color: color-mix(in srgb, var(--ink) 58%, transparent);
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.2;
+  justify-self: end;
+}
+
+/* An open leaf: reached by the pointer or by the keyboard, lifted off the map, saying the whole
+   of its hunter's words and offering the one thing to be done from a glance. */
+.leaf[data-open] {
+  z-index: 1;
+  box-shadow: 4px 7px 18px rgb(0 0 0 / 0.55);
+}
+
+.leaf[data-marked][data-open] {
+  box-shadow:
+    inset 3px 0 0 var(--rust),
+    4px 7px 18px rgb(0 0 0 / 0.55);
+}
+
+.leaf:focus-visible {
+  outline: 1px solid var(--rust);
+  outline-offset: -3px;
+}
+
+/* Two lines of the hunter's latest words and no more: a glance, not a reading. */
+.leaf-words {
+  grid-column: 1 / -1;
+  display: -webkit-box;
+  margin: 3px 0 0;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+/* Open, the clamp goes and the whole of what the hunter said stands. A session that said a great
+   deal says it inside the leaf rather than running the margin off the map. */
+.leaf[data-open] .leaf-words {
+  display: block;
+  max-height: 50vh;
+  overflow: hidden auto;
+  -webkit-line-clamp: none;
+  line-clamp: none;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ink) 40%, transparent) transparent;
+}
+
+.leaf-words[data-silent] {
+  color: color-mix(in srgb, var(--ink) 55%, transparent);
+  font-style: italic;
+}
+
+/* What can be done from an open leaf, at its foot: read the hunter's journal. */
+.leaf-act {
+  grid-column: 1 / -1;
+  display: flex;
+  margin: 8px 0 0;
+}
+
+.leaf-read {
+  margin-left: auto;
+  padding: 0.1em 0.7em 0.2em;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--ink) 55%, transparent);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.leaf-read:hover,
+.leaf-read:focus-visible {
+  color: var(--bone);
+  background: var(--rust);
+  border-color: var(--rust);
+  outline: none;
 }
 
 /* Petitions: a hunter's permission request, pinned down the map's left edge in the rust of awaiting you. */
@@ -1259,9 +1632,9 @@ button.plaque:focus-visible {
     4px 8px 18px rgb(0 0 0 / 0.55);
 }
 
-/* Beside an open journal, it stops short of the journal's leaf. */
+/* Beside an open chronicle, it stops short of the chronicle's edge. */
 .hunter-terminal[data-beside-journal] {
-  right: calc(min(420px, 100vw - 32px) + 32px);
+  right: calc(var(--chronicle) + 32px);
 }
 
 .hunter-terminal[open] {

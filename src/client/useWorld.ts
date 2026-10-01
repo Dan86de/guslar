@@ -1,11 +1,24 @@
 import { useEffect, useState } from "react"
+import { heardFrom, toldFrom, type Heard } from "./heard.js"
 import type { ServerMessage, WorldState } from "../shared/world.js"
 
-export type Connection = { world: WorldState | undefined; connected: boolean }
+export type Connection = {
+  world: WorldState | undefined
+  connected: boolean
+  /** When each hunter of that world was last heard, stamped as its words arrived here. */
+  heard: Map<string, Heard>
+  /** The order this map heard each entry of each hunter's journal in, by the hunter's id. */
+  told: Map<string, number[]>
+}
 
 /** Follows the server's broadcast world, reconnecting with backoff when the server goes away. */
 export function useWorld(): Connection {
-  const [connection, setConnection] = useState<Connection>({ world: undefined, connected: false })
+  const [connection, setConnection] = useState<Connection>({
+    world: undefined,
+    connected: false,
+    heard: new Map(),
+    told: new Map(),
+  })
 
   useEffect(() => {
     let socket: WebSocket | undefined
@@ -21,7 +34,13 @@ export function useWorld(): Connection {
       }
       socket.onmessage = (event: MessageEvent<string>) => {
         const message = JSON.parse(event.data) as ServerMessage
-        setConnection({ world: message.world, connected: true })
+        // Stamped here, where the world arrives: this is the moment the map heard what it carries.
+        setConnection((previous) => ({
+          world: message.world,
+          connected: true,
+          heard: heardFrom(previous.heard, message.world.hunters, Date.now()),
+          told: toldFrom(previous.told, message.world.hunters),
+        }))
       }
       socket.onclose = () => {
         if (stopped) return

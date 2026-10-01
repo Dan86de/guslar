@@ -214,10 +214,28 @@ export const vaillant: Words = {
     sendHome: "Back to the depot",
     close: "Close the service log",
     entries: "Entries",
+    journals: "Service logs",
+    turnTo: (name: string) => `Go to ${name}`,
+    everyone: "Everyone",
+    turnToEveryone: "Go to everyone",
+    youTo: (name: string) => `You to ${name}`,
     outside: (name: string) => `Started outside Guslar: write to ${name} in its own terminal.`,
     reply: (name: string) => `Reply to ${name}`,
     draft: (name: string) => `Write to ${name}…`,
     send: "Send",
+  },
+
+  margin: {
+    leaves: "Notes",
+    latest: ", spoke last",
+    silent: "Nothing said yet.",
+    read: (name: string) => `Read the service log of ${name}`,
+    ago: {
+      justNow: "just now",
+      minutes: (minutes: number) => `${minutes} min ago`,
+      hours: (hours: number) => `${hours} hr ago`,
+      days: (days: number) => (days === 1 ? "a day ago" : `${days} days ago`),
+    },
   },
 
   petition: {

@@ -224,11 +224,38 @@ export const guslar = {
     sendHome: "Send home",
     close: "Close the journal",
     entries: "Entries",
+    /** The index at the journal's head, one name per hunter on the map, which turns it to that hunter. */
+    journals: "Journals",
+    /** What each name in that index does; the name itself is what stands on the page. */
+    turnTo: (name: string) => `Turn to ${name}`,
+    /** The view of everyone, standing first in that index, and said after `of` in its heading. */
+    everyone: "Everyone",
+    turnToEveryone: "Turn to everyone",
+    /** Who a message of yours went to, in the stream of everyone, where `You` alone says too little. */
+    youTo: (name: string) => `You to ${name}`,
     /** In place of the reply line, in the journal of a session started outside Guslar. */
     outside: (name: string) => `Started outside Guslar: write to ${name} in its own terminal.`,
     reply: (name: string) => `Reply to ${name}`,
     draft: (name: string) => `Write to ${name}…`,
     send: "Send",
+  },
+
+  /** The margin of leaves down the map's right edge: each hunter's latest words at a glance. */
+  margin: {
+    leaves: "Leaves",
+    /** Said after the name on the leaf whose hunter spoke most recently. */
+    latest: ", spoke last",
+    /** In place of its words, on the leaf of a hunter that has said nothing yet. */
+    silent: "Not a word yet.",
+    /** The one thing to be done from an open leaf: read the hunter's whole session. */
+    read: (name: string) => `Read the journal of ${name}`,
+    /** How long ago a hunter spoke, as its leaf says it. */
+    ago: {
+      justNow: "just now",
+      minutes: (minutes: number) => `${minutes} min ago`,
+      hours: (hours: number) => `${hours} hr ago`,
+      days: (days: number) => (days === 1 ? "a day ago" : `${days} days ago`),
+    },
   },
 
   petition: {

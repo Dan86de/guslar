@@ -1,5 +1,6 @@
-import { lazy, Suspense, useLayoutEffect, useState } from "react"
-import { Journal } from "./Journal.js"
+import { lazy, Suspense, useCallback, useLayoutEffect, useMemo, useState } from "react"
+import { EVERYONE, Journal } from "./Journal.js"
+import { Margin } from "./Margin.js"
 import { NoticeBoard } from "./NoticeBoard.js"
 import { Prompts } from "./Prompts.js"
 import { RegionRites } from "./RegionRites.js"
@@ -9,7 +10,7 @@ import { boundOf } from "./bound.js"
 import { pageTheme } from "./art.js"
 import { useWords, WORDS, WordsProvider } from "./words/index.js"
 import { THEME_TABS, type Theme } from "../shared/theme.js"
-import type { RegionSlot } from "../shared/world.js"
+import type { Hunter, RegionSlot } from "../shared/world.js"
 
 // The terminal brings a whole terminal emulator, so it loads only once one is opened.
 const TerminalView = lazy(() => import("./TerminalView.js").then((module) => ({ default: module.TerminalView })))
@@ -44,12 +45,32 @@ function showTheme(theme: Theme): void {
   }
 }
 
-function Page({ world, connected, theme }: Connection & { theme: Theme }) {
+/**
+ * The hunters in the order they stand down the map, which only the map knows: the order the margin
+ * stands its leaves in, and the order the chronicle's index turns through, so the two read alike.
+ * A hunter the map has not placed yet keeps the world's own order, at the foot.
+ */
+function standing(hunters: Hunter[], order: string[]): Hunter[] {
+  const place = (id: string) => {
+    const at = order.indexOf(id)
+    return at === -1 ? order.length : at
+  }
+  return [...hunters].sort((one, other) => place(one.id) - place(other.id))
+}
+
+function Page({ world, connected, heard, told, theme }: Connection & { theme: Theme }) {
   const words = useWords()
   const [opened, setOpened] = useState<VillageRef>()
   const [reading, setReading] = useState<string>()
   const [watching, setWatching] = useState<string>()
+  const [glancing, setGlancing] = useState<string>()
   const [performing, setPerforming] = useState<RegionSlot>()
+  // The order the hunters stand in down the map, which only the map knows.
+  const [order, setOrder] = useState<string[]>([])
+  const onHunterOrder = useCallback((ids: string[]) => {
+    setOrder((was) => (was.length === ids.length && was.every((id, at) => id === ids[at]) ? was : ids))
+  }, [])
+  const hunters = useMemo(() => standing(world?.hunters ?? [], order), [world?.hunters, order])
 
   // The board follows the live world; it goes when its village does.
   const region = world?.slots.find((slot) => slot.slot === opened?.slot)
@@ -61,8 +82,15 @@ function Page({ world, connected, theme }: Connection & { theme: Theme }) {
   // So does the journal: it goes when its hunter leaves the map.
   const hunter = world?.hunters.find((h) => h.id === reading)
 
+  // Turned to everyone, it stands as long as there is more than one hunter to read, which is as
+  // long as the index that turns it there stands.
+  const everyone = reading === EVERYONE && hunters.length > 1
+
   // And the terminal: it goes when its hunter does, and the server hangs it up.
   const terminalHunter = world?.hunters.find((h) => h.id === watching)
+
+  // And the mark an open leaf puts on the map: it goes with the hunter whose leaf it was.
+  const glanced = world?.hunters.some((h) => h.id === glancing) ? glancing : undefined
 
   return (
     <main>
@@ -72,8 +100,10 @@ function Page({ world, connected, theme }: Connection & { theme: Theme }) {
         key={theme}
         theme={theme}
         world={world}
-        onOpenVillage={setOpened} onOpenHunter={setReading} onOpenRegion={setPerforming} />
+        onOpenVillage={setOpened} onOpenHunter={setReading} onOpenRegion={setPerforming}
+        onHunterOrder={onHunterOrder} glanced={glanced} />
       {world && <Prompts world={world} />}
+      <Margin hunters={hunters} heard={heard} open={glanced} onOpen={setGlancing} onRead={setReading} />
       {opened && village && (
         <NoticeBoard
           key={`${opened.slot}/${village.slug}`}
@@ -93,21 +123,23 @@ function Page({ world, connected, theme }: Connection & { theme: Theme }) {
           onClose={() => setPerforming(undefined)}
         />
       )}
-      {world && hunter && (
+      {world && (hunter || everyone) && (
         <Journal
-          key={hunter.id}
           hunter={hunter}
-          bound={boundOf(words, world, hunter)}
-          onOpenTerminal={() => setWatching(hunter.id)}
+          hunters={hunters}
+          told={told}
+          bound={hunter && boundOf(words, world, hunter)}
+          onTurn={setReading}
+          onOpenTerminal={() => hunter && setWatching(hunter.id)}
           onClose={() => setReading(undefined)}
         />
       )}
       {terminalHunter && (
-        // Its own key: a sibling keyed like the journal would be taken for it.
+        // Its own key: it is made anew for each hunter, where the chronicle beside it is turned.
         <Suspense key={`terminal/${terminalHunter.id}`}>
           <TerminalView
             hunter={terminalHunter}
-            besideJournal={Boolean(hunter)}
+            besideJournal={Boolean(hunter) || everyone}
             onClose={() => setWatching(undefined)}
           />
         </Suspense>
