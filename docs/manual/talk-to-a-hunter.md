@@ -123,6 +123,16 @@ No text overlaps, runs out of the surface or crosses the inner rule, and the pai
 The dialog is `Journal of Bogna` again, holding that hunter's entries with `BASH` on the rail, and the text box `Reply to Bogna` is back at its foot.
 Run `verify press Escape` to put the journal away.
 
+- **Closing the journal leaves the margin standing.** Run `verify point "Dobromir"`, then `verify click "Read the journal of Dobromir"` and `verify click "Close the journal"`, and `verify snapshot`.
+No dialog `Journal of Dobromir` stands, and the region `Leaves` holds its four articles again, `Jaromila`, `Wojmir`, `Dobromir` and `Bogna`, each saying its hunter's latest words as it did before: the leaf the pointer still rests on is closed with the rest, since nothing moved onto it, and holds no `Read the journal of Dobromir`.
+Run `verify screenshot closed` and `verify screenshot closed-margin --clip 1130,0,310,380 --zoom 3`, and open both.
+The four leaves stand down the map's right edge as they stood before the journal opened, `Jaromila`'s framed in rust as the one heard last, and nothing else stands over the painted world, which shows whole left of them.
+- **A hunter sent home takes its leaf with it.** Run `verify point "The weir is mended"`, which prints `pointing at leaf "Bogna"`, then `verify click "Read the journal of Bogna"` and `verify click "Send home"`.
+Run `verify wait-for "Bogna" --gone`: it prints `"Bogna" is gone after <n> ms`.
+`verify snapshot` shows no dialog `Journal of Bogna`, the list `Hunters` down to `Wojmir`, `Dobromir` and `Jaromila`, and the region `Leaves` down to those same three articles, `Jaromila` still the first of them: the journal closes with its hunter, and the leaf goes from the margin with it.
+Run `verify screenshot gone` and `verify screenshot gone-margin --clip 1130,0,310,380 --zoom 3`, and open both.
+Three leaves stand where four stood, closed up with no gap where `Bogna`'s was and the margin still standing for the hunters left; on the map `Bogna`'s figure and name are gone from the woodland by `Ward the well`, and the painted world is whole left of the margin.
+
 ## Behind it
 
 - **What the claude was sent.** `verify read claude.log`. After its start lines, the claude has `stdin: {"type":"user","message":{"role":"user","content":[{"type":"text","text":"/implement-slice .scratch/slices/drain-the-bog.json S3"}]}}`, then `sent result success` and `waiting for the next message`, then `stdin: {"type":"user","message":{"role":"user","content":[{"type":"text","text":"Oak, from the old grove."}]}}` and `replaying on`, then `sent assistant Edit`, `sent result success` and `replay done`, and last `stdin: {"type":"user","message":{"role":"user","content":[{"type":"text","text":"Pine next time."}]}}`.
