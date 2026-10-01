@@ -767,6 +767,9 @@ button.plaque:focus-visible {
 
 .journal {
   position: fixed;
+  /* Over the margin it is opened from: an open leaf lifts above its neighbours, never above the
+     surface standing on top of them. */
+  z-index: 2;
   inset: 16px 16px 16px auto;
   width: var(--chronicle);
   height: auto;
@@ -1614,6 +1617,8 @@ button.plaque:focus-visible {
 
 .hunter-terminal {
   position: fixed;
+  /* Over the margin as well, for the same reason the chronicle is. */
+  z-index: 2;
   inset: auto 16px 16px 16px;
   width: auto;
   max-width: none;

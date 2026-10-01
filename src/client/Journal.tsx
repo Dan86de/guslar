@@ -190,6 +190,14 @@ export function Journal({
     if (element && !element.open) element.show()
   }, [])
 
+  // Turned to everyone, the chronicle closes when the second to last hunter leaves it: the index
+  // that turned it there is gone with that hunter, and a stream of one is that one's own page.
+  // It closes itself, as Escape and `Close` do, so what opened it takes the keyboard back and
+  // nothing is left reading a page that is no longer there.
+  useLayoutEffect(() => {
+    if (!hunter && hunters.length <= 1) dialog.current?.close()
+  }, [hunter, hunters.length])
+
   // New entries keep the journal at its last page, unless you have turned back to read, and a
   // page turned back to is where the chronicle stands again when you come back to that hunter.
   useLayoutEffect(() => {
@@ -206,9 +214,11 @@ export function Journal({
     const { id } = hunter
     if (text === "" || sending === id) return
     setSending(id)
-    setProblem(undefined)
+    // Each of these is one hunter's, so a send to another hunter neither frees this one's `Send`
+    // while its reply is still on the wire nor throws away what that one was told.
+    setProblem((was) => (was?.hunter === id ? undefined : was))
     const refused = await sendReply(words, hunter, text)
-    setSending(undefined)
+    setSending((was) => (was === id ? undefined : was))
     if (refused) {
       setProblem({ hunter: id, said: refused })
       return
@@ -321,6 +331,9 @@ export function Journal({
         </button>
       </header>
       <ol
+        // One list per page, so turning to another hunter puts a new list up rather than replacing
+        // every line of a live one, which a screen reader would read out whole.
+        key={at}
         ref={entries}
         className="journal-entries"
         aria-label={words.journal.entries}

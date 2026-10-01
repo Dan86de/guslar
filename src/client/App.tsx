@@ -82,9 +82,10 @@ function Page({ world, connected, heard, told, theme }: Connection & { theme: Th
   // So does the journal: it goes when its hunter leaves the map.
   const hunter = world?.hunters.find((h) => h.id === reading)
 
-  // Turned to everyone, it stands as long as there is more than one hunter to read, which is as
-  // long as the index that turns it there stands.
-  const everyone = reading === EVERYONE && hunters.length > 1
+  // Turned to everyone, it stands as long as there is more than one hunter to read. With one left
+  // the chronicle closes itself, rather than being taken from under the page here: closed, it stays
+  // closed, where a chronicle merely hidden would stand again the next time a hunter rode out.
+  const everyone = reading === EVERYONE
 
   // And the terminal: it goes when its hunter does, and the server hangs it up.
   const terminalHunter = world?.hunters.find((h) => h.id === watching)
