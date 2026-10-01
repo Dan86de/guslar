@@ -715,6 +715,14 @@ button.plaque:focus-visible {
   box-shadow: inset 0 0 0 1px var(--rust);
 }
 
+/* The hunter whose leaf in the margin is open: its name on rust, so a glance at a leaf says
+   which figure on the map it is about. */
+.hunter[data-glanced] .hunter-name {
+  color: var(--bone);
+  background: var(--rust);
+  border-color: var(--rust);
+}
+
 /* The name and the figure under it open the hunter's journal. */
 .hunter-open {
   position: relative;
@@ -1240,6 +1248,7 @@ button.plaque:focus-visible {
 }
 
 .leaf {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 2px 10px;
@@ -1278,6 +1287,24 @@ button.plaque:focus-visible {
   justify-self: end;
 }
 
+/* An open leaf: reached by the pointer or by the keyboard, lifted off the map, saying the whole
+   of its hunter's words and offering the one thing to be done from a glance. */
+.leaf[data-open] {
+  z-index: 1;
+  box-shadow: 4px 7px 18px rgb(0 0 0 / 0.55);
+}
+
+.leaf[data-marked][data-open] {
+  box-shadow:
+    inset 3px 0 0 var(--rust),
+    4px 7px 18px rgb(0 0 0 / 0.55);
+}
+
+.leaf:focus-visible {
+  outline: 1px solid var(--rust);
+  outline-offset: -3px;
+}
+
 /* Two lines of the hunter's latest words and no more: a glance, not a reading. */
 .leaf-words {
   grid-column: 1 / -1;
@@ -1292,9 +1319,48 @@ button.plaque:focus-visible {
   line-clamp: 2;
 }
 
+/* Open, the clamp goes and the whole of what the hunter said stands. A session that said a great
+   deal says it inside the leaf rather than running the margin off the map. */
+.leaf[data-open] .leaf-words {
+  display: block;
+  max-height: 50vh;
+  overflow: hidden auto;
+  -webkit-line-clamp: none;
+  line-clamp: none;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ink) 40%, transparent) transparent;
+}
+
 .leaf-words[data-silent] {
   color: color-mix(in srgb, var(--ink) 55%, transparent);
   font-style: italic;
+}
+
+/* What can be done from an open leaf, at its foot: read the hunter's journal. */
+.leaf-act {
+  grid-column: 1 / -1;
+  display: flex;
+  margin: 8px 0 0;
+}
+
+.leaf-read {
+  margin-left: auto;
+  padding: 0.1em 0.7em 0.2em;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--ink) 55%, transparent);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.leaf-read:hover,
+.leaf-read:focus-visible {
+  color: var(--bone);
+  background: var(--rust);
+  border-color: var(--rust);
+  outline: none;
 }
 
 /* Petitions: a hunter's permission request, pinned down the map's left edge in the rust of awaiting you. */

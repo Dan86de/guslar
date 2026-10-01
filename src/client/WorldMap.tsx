@@ -83,6 +83,7 @@ export function WorldMap({
   onOpenHunter,
   onOpenRegion,
   onHunterOrder,
+  glanced,
 }: {
   /** The theme the map is painted in, for as long as it is mounted. */
   theme: Theme
@@ -94,6 +95,8 @@ export function WorldMap({
   onOpenRegion: (slot: RegionSlot) => void
   /** Says the order the hunters stand in down the map, whenever it changes. */
   onHunterOrder: (ids: string[]) => void
+  /** The hunter whose leaf in the margin is open, marked on the map for as long as it is. */
+  glanced: string | undefined
 }) {
   const words = useWords()
   const host = useRef<HTMLDivElement>(null)
@@ -319,7 +322,13 @@ export function WorldMap({
             })}
           </ul>
           <VillageList world={world} view={view} aspect={scene.villageAspect} onOpen={onOpenVillage} />
-          <HunterList world={world} view={view} aspect={scene.villageAspect} onOpen={onOpenHunter} />
+          <HunterList
+            world={world}
+            view={view}
+            aspect={scene.villageAspect}
+            onOpen={onOpenHunter}
+            glanced={glanced}
+          />
           <ul className="slots" aria-label={words.map.regionRites}>
             {world.slots.map((slot) => {
               if (slot.kind !== "region") return null
@@ -398,17 +407,22 @@ function VillageList({
  * Each hunter's name over its painted figure's head, following it as it rides, with its state and
  * what it is out for said in words for anyone who cannot see the pose. The name and the figure under it
  * are one button, named by the hunter, which opens its journal.
+ *
+ * The hunter whose leaf in the margin is open is marked here, so reading a leaf says on the world
+ * which figure it is about.
  */
 function HunterList({
   world,
   view,
   aspect,
   onOpen,
+  glanced,
 }: {
   world: WorldState
   view: View
   aspect: number
   onOpen: (id: string) => void
+  glanced: string | undefined
 }) {
   const words = useWords()
   const places = hunterPlaces(world, aspect)
@@ -423,7 +437,13 @@ function HunterList({
           "--figure-height": `${height * view.scale}px`,
         }
         return (
-          <li key={hunter.id} className="hunter" style={style} data-state={hunter.state}>
+          <li
+            key={hunter.id}
+            className="hunter"
+            style={style}
+            data-state={hunter.state}
+            data-glanced={hunter.id === glanced || undefined}
+          >
             {/* Named by the hunter alone, so a village's name opens only its village. */}
             <button
               type="button"

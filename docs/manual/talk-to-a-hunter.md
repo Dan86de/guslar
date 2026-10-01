@@ -4,6 +4,7 @@ A user opens a hunter's journal from its figure on the map and reads its session
 The journal stands beside the map, so the hunter can still be watched, and takes a typed reply, which goes to the session as your next message.
 What the hunter says is set as type in the leaf's own hand - headings, lists, tables and code take their shape - so the longer and more structured an answer is, the more readable it gets.
 Every hunter on the map also stands a leaf in a margin down the map's right edge, saying who it is, how long ago it spoke, and its latest words in two lines, so what everyone is up to is read at a glance with nothing opened.
+A leaf opens under the pointer, and from the keyboard, to the whole of those words and an offer to read that hunter's journal, with the hunter itself marked on the map for as long as it stands open.
 
 ## Entry points
 
@@ -11,6 +12,7 @@ Every hunter on the map also stands a leaf in a margin down the map's right edge
 - The journal's reply box, sent with `Send` or with Enter.
 - The world broadcast on `/ws` (and `/api/world`), which carries every hunter's `"journal"`.
 - The margin down the map's right edge: one leaf per hunter on the map, saying its latest words.
+- An open leaf's `Read the journal of <hunter name>`, which opens that hunter's journal.
 
 ## Steps
 
@@ -62,6 +64,18 @@ No leaf's words overlap, run out of their leaf or reach a third line, no leaf co
 Run `verify click "Rites of Bogwater Reach"`, `verify click "Set the proof of kill"`, `verify click "Never ask"` and `verify press Escape`, then `verify wait-for "Jaromila , returned with a trophy, sent to set the proof of kill in Bogwater Reach"`.
 `verify snapshot`: the region `Leaves` holds four articles now, `Jaromila` the first of them, since it stands by the plaque above the villages, and its leaf alone reads `Jaromila , spoke last`; `Dobromir`'s no longer does.
 Run `verify pause 2500`, then `verify screenshot margin-moved` and `verify screenshot margin-moved-close --clip 1130,0,310,380 --zoom 3`, and open both: the rust mark is on the top leaf now and gone from `Dobromir`'s, and the four leaves still stand clear of one another.
+- **A leaf opens from the keyboard.** Run `verify click "Rites of kettle"`, then `verify press Escape`, which puts the rites away and the keyboard back on the plaque's button, the last thing on the map before the margin.
+Run `verify press Tab`: it reaches the first leaf, which is the leaf itself and not something inside it.
+`verify snapshot` shows `Jaromila`'s leaf, the first of the four, saying the whole of what it said, `The gauge reads depth = 2.4 and the sill is cut from timber = "oak". weir.gauge = 2.4 weir.readings = [0.5, 1.25, 2.4, 3.75, 4.0, 5.5, 6.25, 7.0, 8.125, 9.5, 10.75, 11.0]`, and holding a button `Read the journal of Jaromila` under it.
+The other three leaves hold no such button: one leaf is open at a time.
+Run `verify screenshot leaf-keyed` and `verify screenshot leaf-keyed-close --clip 1130,0,310,400 --zoom 3`, and open both.
+The leaf stands on a deeper shadow than the rest, lifted off the map, with a rust hairline just inside its edge where the keyboard is, its words running to as many lines as they take instead of two, and the offer at its foot.
+On the map, `Jaromila` by the plaque of `Bogwater Reach` is written in bone on rust instead of in bone on the night, which no other hunter's name is: the leaf says which figure it is about.
+- **A leaf opens under the pointer.** Run `verify point "Dobromir"`. It prints `pointing at leaf "Dobromir"`.
+`verify snapshot` shows `Dobromir`'s leaf open the same way, with its whole words and a button `Read the journal of Dobromir`, and `Jaromila`'s closed again with no button.
+Run `verify screenshot leaf-pointed` and `verify screenshot leaf-pointed-close --clip 1130,0,310,400 --zoom 3`, and open both: `Dobromir`'s leaf is the lifted one now, with no rust hairline inside it since the keyboard is elsewhere, and on the map `Dobromir`'s name is the one on rust while `Jaromila`'s is back on the night.
+Run `verify click "Read the journal of Dobromir"`, then `verify snapshot`: the dialog `Journal of Dobromir` is open over the margin, and the leaf the pointer has left is closed behind it.
+Run `verify press Escape` to put the journal away.
 
 ## Behind it
 
@@ -85,4 +99,8 @@ Run `verify pause 2500`, then `verify screenshot margin-moved` and `verify scree
 - How long ago a hunter spoke is counted from when this map heard it, not from a clock the server keeps: the broadcast carries one state of the world and no time at all, so a map just opened says every hunter spoke just now.
 - The leaves read the way the map reads: they stand in the order their hunters stand down it, and the hunter heard last is marked where it is rather than moved to the top.
 - The margin floats over the map's right edge, so the world under it is covered whenever any hunter is out; the journal is wider than the margin and stands over it while it is open.
+- A leaf opens when the pointer moves onto it, not when something over the margin closes under a pointer that has not moved: closing the journal leaves every leaf as it was.
+- One leaf is open at a time: pointing at another leaf, or reaching one with the keyboard, closes the one that was open, and the mark on the map goes with it.
+- An open leaf says the whole of its hunter's latest words, however many lines they take. A session that said a great deal says it inside the leaf, which scrolls rather than running the margin off the map.
+- A leaf stays read-only open: it offers to read the hunter's journal and nothing else, since answering is not a glance.
 - Text that merely looks like markdown is set as markdown. A line that happens to start with a hash, or a stray run of pipes in a log, takes a shape the hunter did not intend; its characters survive, but its form may surprise.

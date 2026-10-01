@@ -31,15 +31,53 @@ function useClock(): number {
  * The words are the plain text of what it said, since a glance has no room for the shape the
  * journal sets them in, and the marks it wrote them with read no better here than there.
  *
+ * Pointed at, or reached with the keyboard, the leaf opens: the clamp goes, so it says the whole
+ * of those words, and it offers the one thing to be done from a glance, which is to read the
+ * hunter's journal. The leaf itself is the tab stop, so the offer is reached by the keyboard the
+ * same way it is found by the pointer, rather than only appearing for one of the two.
+ *
  * The parse is memoised on the text: a leaf is drawn again on every world update and on every turn
  * of the clock, and a hunter's words never change once they have arrived.
  */
-function Leaf({ hunter, heard, now, marked }: { hunter: Hunter; heard: Heard | undefined; now: number; marked: boolean }) {
+function Leaf({
+  hunter,
+  heard,
+  now,
+  marked,
+  open,
+  onOpen,
+  onClose,
+  onRead,
+}: {
+  hunter: Hunter
+  heard: Heard | undefined
+  now: number
+  marked: boolean
+  open: boolean
+  onOpen: () => void
+  onClose: () => void
+  onRead: () => void
+}) {
   const words = useWords()
   const text = latestWords(hunter)?.text
   const glance = useMemo(() => (text === undefined ? undefined : plain(text)), [text])
   return (
-    <article className="leaf" data-state={hunter.state} data-marked={marked || undefined}>
+    <article
+      className="leaf"
+      tabIndex={0}
+      data-state={hunter.state}
+      data-marked={marked || undefined}
+      data-open={open || undefined}
+      // On the pointer moving onto the leaf, not on it merely being uncovered: closing something
+      // over the margin leaves the pointer where it was, and nothing a user did opens a leaf there.
+      onPointerMove={onOpen}
+      onPointerLeave={onClose}
+      onFocus={onOpen}
+      // Focus moving to the leaf's own button is focus still inside the leaf, so it stays open.
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onClose()
+      }}
+    >
       <p className="leaf-who">
         {hunter.name}
         {marked && <span className="visually-hidden">{words.margin.latest}</span>}
@@ -48,6 +86,13 @@ function Leaf({ hunter, heard, now, marked }: { hunter: Hunter; heard: Heard | u
       <p className="leaf-words" data-silent={glance === undefined || undefined}>
         {glance ?? words.margin.silent}
       </p>
+      {open && (
+        <p className="leaf-act">
+          <button type="button" className="leaf-read" onClick={onRead}>
+            {words.margin.read(hunter.name)}
+          </button>
+        </p>
+      )}
     </article>
   )
 }
@@ -56,8 +101,28 @@ function Leaf({ hunter, heard, now, marked }: { hunter: Hunter; heard: Heard | u
  * The margin: a leaf for every hunter on the map, down its right edge. The leaves stand in the
  * order their hunters stand down the map, which the map itself reports, so the margin reads the
  * way the map reads; recency is carried by a mark on the leaf heard last instead of by the order.
+ *
+ * Which leaf is open is the page's, not the margin's: the map marks that hunter's figure for as
+ * long as it is, so a glance at a leaf says on the world which hunter it is about.
  */
-export function Margin({ world, heard, order }: { world: WorldState; heard: Map<string, Heard>; order: string[] }) {
+export function Margin({
+  world,
+  heard,
+  order,
+  open,
+  onOpen,
+  onRead,
+}: {
+  world: WorldState
+  heard: Map<string, Heard>
+  order: string[]
+  /** The hunter whose leaf is open, if any. */
+  open: string | undefined
+  /** Says which hunter's leaf is open now, or none. */
+  onOpen: (id: string | undefined) => void
+  /** Reads a hunter's journal, by the hunter's id. */
+  onRead: (id: string) => void
+}) {
   const words = useWords()
   const now = useClock()
   if (world.hunters.length === 0) return null
@@ -73,7 +138,20 @@ export function Margin({ world, heard, order }: { world: WorldState; heard: Map<
   return (
     <section className="margin" aria-label={words.margin.leaves}>
       {leaves.map((hunter) => (
-        <Leaf key={hunter.id} hunter={hunter} heard={heard.get(hunter.id)} now={now} marked={hunter.id === marked} />
+        <Leaf
+          key={hunter.id}
+          hunter={hunter}
+          heard={heard.get(hunter.id)}
+          now={now}
+          marked={hunter.id === marked}
+          open={hunter.id === open}
+          onOpen={() => onOpen(hunter.id)}
+          // The pointer leaves one leaf before it enters the next, so a leaf closes only its own.
+          onClose={() => {
+            if (hunter.id === open) onOpen(undefined)
+          }}
+          onRead={() => onRead(hunter.id)}
+        />
       ))}
     </section>
   )

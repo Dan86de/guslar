@@ -238,6 +238,8 @@ export const guslar = {
     latest: ", spoke last",
     /** In place of its words, on the leaf of a hunter that has said nothing yet. */
     silent: "Not a word yet.",
+    /** The one thing to be done from an open leaf: read the hunter's whole session. */
+    read: (name: string) => `Read the journal of ${name}`,
     /** How long ago a hunter spoke, as its leaf says it. */
     ago: {
       justNow: "just now",

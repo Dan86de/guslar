@@ -50,6 +50,7 @@ function Page({ world, connected, heard, theme }: Connection & { theme: Theme })
   const [opened, setOpened] = useState<VillageRef>()
   const [reading, setReading] = useState<string>()
   const [watching, setWatching] = useState<string>()
+  const [glancing, setGlancing] = useState<string>()
   const [performing, setPerforming] = useState<RegionSlot>()
   // The order the hunters stand in down the map, which only the map knows: the margin reads it.
   const [order, setOrder] = useState<string[]>([])
@@ -70,6 +71,9 @@ function Page({ world, connected, heard, theme }: Connection & { theme: Theme })
   // And the terminal: it goes when its hunter does, and the server hangs it up.
   const terminalHunter = world?.hunters.find((h) => h.id === watching)
 
+  // And the mark an open leaf puts on the map: it goes with the hunter whose leaf it was.
+  const glanced = world?.hunters.some((h) => h.id === glancing) ? glancing : undefined
+
   return (
     <main>
       <h1 className="visually-hidden">{words.app.heading}</h1>
@@ -79,9 +83,11 @@ function Page({ world, connected, heard, theme }: Connection & { theme: Theme })
         theme={theme}
         world={world}
         onOpenVillage={setOpened} onOpenHunter={setReading} onOpenRegion={setPerforming}
-        onHunterOrder={onHunterOrder} />
+        onHunterOrder={onHunterOrder} glanced={glanced} />
       {world && <Prompts world={world} />}
-      {world && <Margin world={world} heard={heard} order={order} />}
+      {world && (
+        <Margin world={world} heard={heard} order={order} open={glanced} onOpen={setGlancing} onRead={setReading} />
+      )}
       {opened && village && (
         <NoticeBoard
           key={`${opened.slot}/${village.slug}`}

@@ -224,6 +224,7 @@ export const vaillant: Words = {
     leaves: "Notes",
     latest: ", spoke last",
     silent: "Nothing said yet.",
+    read: (name: string) => `Read the service log of ${name}`,
     ago: {
       justNow: "just now",
       minutes: (minutes: number) => `${minutes} min ago`,
