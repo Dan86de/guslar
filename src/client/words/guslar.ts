@@ -228,6 +228,11 @@ export const guslar = {
     journals: "Journals",
     /** What each name in that index does; the name itself is what stands on the page. */
     turnTo: (name: string) => `Turn to ${name}`,
+    /** The view of everyone, standing first in that index, and said after `of` in its heading. */
+    everyone: "Everyone",
+    turnToEveryone: "Turn to everyone",
+    /** Who a message of yours went to, in the stream of everyone, where `You` alone says too little. */
+    youTo: (name: string) => `You to ${name}`,
     /** In place of the reply line, in the journal of a session started outside Guslar. */
     outside: (name: string) => `Started outside Guslar: write to ${name} in its own terminal.`,
     reply: (name: string) => `Reply to ${name}`,

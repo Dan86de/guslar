@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useLayoutEffect, useMemo, useState } from "react"
-import { Journal } from "./Journal.js"
+import { EVERYONE, Journal } from "./Journal.js"
 import { Margin } from "./Margin.js"
 import { NoticeBoard } from "./NoticeBoard.js"
 import { Prompts } from "./Prompts.js"
@@ -58,7 +58,7 @@ function standing(hunters: Hunter[], order: string[]): Hunter[] {
   return [...hunters].sort((one, other) => place(one.id) - place(other.id))
 }
 
-function Page({ world, connected, heard, theme }: Connection & { theme: Theme }) {
+function Page({ world, connected, heard, told, theme }: Connection & { theme: Theme }) {
   const words = useWords()
   const [opened, setOpened] = useState<VillageRef>()
   const [reading, setReading] = useState<string>()
@@ -81,6 +81,10 @@ function Page({ world, connected, heard, theme }: Connection & { theme: Theme })
 
   // So does the journal: it goes when its hunter leaves the map.
   const hunter = world?.hunters.find((h) => h.id === reading)
+
+  // Turned to everyone, it stands as long as there is more than one hunter to read, which is as
+  // long as the index that turns it there stands.
+  const everyone = reading === EVERYONE && hunters.length > 1
 
   // And the terminal: it goes when its hunter does, and the server hangs it up.
   const terminalHunter = world?.hunters.find((h) => h.id === watching)
@@ -119,13 +123,14 @@ function Page({ world, connected, heard, theme }: Connection & { theme: Theme })
           onClose={() => setPerforming(undefined)}
         />
       )}
-      {world && hunter && (
+      {world && (hunter || everyone) && (
         <Journal
           hunter={hunter}
           hunters={hunters}
-          bound={boundOf(words, world, hunter)}
+          told={told}
+          bound={hunter && boundOf(words, world, hunter)}
           onTurn={setReading}
-          onOpenTerminal={() => setWatching(hunter.id)}
+          onOpenTerminal={() => hunter && setWatching(hunter.id)}
           onClose={() => setReading(undefined)}
         />
       )}
@@ -134,7 +139,7 @@ function Page({ world, connected, heard, theme }: Connection & { theme: Theme })
         <Suspense key={`terminal/${terminalHunter.id}`}>
           <TerminalView
             hunter={terminalHunter}
-            besideJournal={Boolean(hunter)}
+            besideJournal={Boolean(hunter) || everyone}
             onClose={() => setWatching(undefined)}
           />
         </Suspense>

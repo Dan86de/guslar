@@ -4,6 +4,7 @@ Every hunter on the map stands a leaf in a margin down the map's right edge, say
 A leaf opens under the pointer, and from the keyboard, to the whole of those words and an offer to read that hunter's journal, with the hunter itself marked on the map for as long as it stands open.
 Choosing that offer opens the journal: one surface for reading the hunter's whole session, a reading page wide enough for a table, a diff and a fenced block, with the tool calls of each turn standing on a rail beside the words that called them.
 An index of every hunter on the map stands at its head, and turns it from one to another without closing it, holding on to what you had begun writing to each and the place you had turned back to in its session.
+At the head of that index stands everyone: every hunter's turns in one stream, in the order this map heard them, read and not written to, since there is nobody in particular in it to write to.
 What the hunter says is set as type in the journal's own hand - headings, lists, tables and code take their shape - so the longer and more structured an answer is, the more readable it gets.
 A line at the journal's foot writes back to that hunter by name, and what you type goes to the session as its next message.
 
@@ -11,7 +12,7 @@ A line at the journal's foot writes back to that hunter by name, and what you ty
 
 - The margin down the map's right edge: one leaf per hunter on the map, saying its latest words.
 - An open leaf's `Read the journal of <hunter name>`, which opens that hunter's journal.
-- The index at the journal's head: one name per hunter on the map, which turns the journal to that hunter.
+- The index at the journal's head: `Everyone`, then one name per hunter on the map, which turns the journal to that hunter.
 - A hunter on the map: its name over its head, or its figure, which opens its journal.
 - The journal's reply box, sent with `Send` or with Enter.
 - The world broadcast on `/ws` (and `/api/world`), which carries every hunter's `"journal"`.
@@ -107,7 +108,20 @@ Run `verify press Shift+Tab`, which reaches the fenced block and turns the page 
 `turn-place` and `turn-kept` are the same page, turned back to the same place: `DOBROMIR` over `The gauge reads depth = 2.4 and the sill is cut from timber = "oak".`, the fenced block under it, `The turn ends.` under that and the first of the three `YOU` lines cut off at the foot, with the rest out of sight below.
 The one difference between them is the rust ring the keyboard left around the block, which is gone in `turn-kept` because the index holds the keyboard instead.
 In `turn-away`, `Bogna`'s own page stands at the foot of its session, where that hunter was left.
-Run `verify screenshot turn-tall --size 1440x900` to put the window back, then `verify press Escape` to put the journal away.
+Run `verify screenshot turn-tall --size 1440x900` to put the window back.
+- **Everyone in one stream.** Run `verify click "Everyone"` and `verify snapshot`.
+The dialog is `Journal of Everyone` now, with `Everyone` the page of the index and no hunter's name marked on it.
+It has no contract line, no state, no `Open in terminal`, no `Send home`, and no text box or `Send` at its foot: the stream is nobody's, so there is nobody in it to write to.
+`Entries` holds every hunter's turns and nothing else, eighteen items in the order this map heard them: `You to Wojmir: /implement-slice .scratch/slices/drain-the-bog.json S3`, `Wojmir: Slice S3: Lay the plank road (also ready: S2)`, `Wojmir: The spec does not say what the planks are made of. Oak or pine?`, `You to Wojmir: Oak, from the old grove.`, `Wojmir: Oak it is.`, `Wojmir: The plank road is laid in oak.`, `You to Wojmir: Pine next time.`, `You to Bogna: /implement-slice .scratch/slices/ward-the-well.json S1`, `Bogna:` with the plan it set out, ``You to Bogna: **Oak**, from the `old grove`.``, `Bogna: The weir is mended. See the measurements for the rest.`, `You to Dobromir: /implement-slice .scratch/slices/gauge-the-sluice.json S1`, `Dobromir:` with its gauge reading, `You to Jaromila: /make-verify`, `Jaromila:` with the same reading, and last `You to Dobromir: Set it to 2.4.`, `You to Dobromir: And log the readings.` and `You to Dobromir: Then close the sluice.`
+Each hunter's own lines keep the order its own page has them in, and every line says whose it is: yours by the hunter you wrote it to, a hunter's by its name.
+No `Bash:`, `Read:`, `Edit:` or `The turn ends.` stands anywhere in it: a tool call is a hunter's own work, read on its own page beside the words that called it.
+Run `verify screenshot everyone` and `verify screenshot everyone-head --clip 545,10,880,120 --zoom 2`, and open both.
+`JOURNAL OF` in small capitals over `Everyone` stands where a hunter's name stood, with `EVERYONE` first in the index under the close, ruled in rust as the page you are on, and the four hunters' names after it.
+The turns run down one page the whole width of the surface, with no rail beside them, each under the name of whoever said it, and the foot of the surface is the last of them rather than a reply box.
+No text overlaps, runs out of the surface or crosses the inner rule, and the painted world shows uncropped left of it.
+- **Back to one hunter.** Run `verify click "Turn to Bogna"` and `verify snapshot`.
+The dialog is `Journal of Bogna` again, holding that hunter's entries with `BASH` on the rail, and the text box `Reply to Bogna` is back at its foot.
+Run `verify press Escape` to put the journal away.
 
 ## Behind it
 
@@ -139,4 +153,7 @@ Run `verify screenshot turn-tall --size 1440x900` to put the window back, then `
 - The journal is one surface turned from hunter to hunter, not one opened anew for each: what you had begun writing to a hunter, and the place you had turned back to in its session, are both still there when you come back to it. Closing the journal lets them go.
 - The index stands only while more than one hunter is on the map, since with one there is nowhere to turn to, and it stands in the head's own space, so turning from hunter to hunter never moves the reading page under it.
 - A hunter written to follows its words again: the page goes back to the foot and stays there as the session answers, wherever you had turned back to before you wrote.
+- Everyone's stream is words alone: what you wrote to each hunter and what each said back. A tool call and the end of a turn are a hunter's own work, read on its own page beside the words that called them; in the stream they would say nothing about whose turn they were.
+- The order of everyone's stream is the order this map heard it, not a clock the server keeps, since the broadcast carries none. Turns already in a journal when the map opened all arrived at once, and keep the order the world listed their hunters in; everything said after that is in true order.
+- Everyone stands in the index only while more than one hunter is on the map, as the rest of the index does, and the chronicle closes rather than standing empty when the second to last hunter leaves it.
 - Text that merely looks like markdown is set as markdown. A line that happens to start with a hash, or a stray run of pipes in a log, takes a shape the hunter did not intend; its characters survive, but its form may surprise.

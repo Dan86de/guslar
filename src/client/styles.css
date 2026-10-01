@@ -970,6 +970,13 @@ button.plaque:focus-visible {
   scrollbar-color: var(--bog) transparent;
 }
 
+/* Turned to everyone, the chronicle has no rail: a tool call is a hunter's own work, read on its
+   own page beside the words that called it, so the stream is words alone and they take the whole
+   width of the surface. */
+.journal[data-everyone] .journal-entries {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 /* A page entry never strays into the rail, whatever row it is on. */
 .entry {
   grid-column: 1;
