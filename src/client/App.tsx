@@ -1,5 +1,6 @@
-import { lazy, Suspense, useLayoutEffect, useState } from "react"
+import { lazy, Suspense, useCallback, useLayoutEffect, useState } from "react"
 import { Journal } from "./Journal.js"
+import { Margin } from "./Margin.js"
 import { NoticeBoard } from "./NoticeBoard.js"
 import { Prompts } from "./Prompts.js"
 import { RegionRites } from "./RegionRites.js"
@@ -44,12 +45,17 @@ function showTheme(theme: Theme): void {
   }
 }
 
-function Page({ world, connected, theme }: Connection & { theme: Theme }) {
+function Page({ world, connected, heard, theme }: Connection & { theme: Theme }) {
   const words = useWords()
   const [opened, setOpened] = useState<VillageRef>()
   const [reading, setReading] = useState<string>()
   const [watching, setWatching] = useState<string>()
   const [performing, setPerforming] = useState<RegionSlot>()
+  // The order the hunters stand in down the map, which only the map knows: the margin reads it.
+  const [order, setOrder] = useState<string[]>([])
+  const onHunterOrder = useCallback((ids: string[]) => {
+    setOrder((was) => (was.length === ids.length && was.every((id, at) => id === ids[at]) ? was : ids))
+  }, [])
 
   // The board follows the live world; it goes when its village does.
   const region = world?.slots.find((slot) => slot.slot === opened?.slot)
@@ -72,8 +78,10 @@ function Page({ world, connected, theme }: Connection & { theme: Theme }) {
         key={theme}
         theme={theme}
         world={world}
-        onOpenVillage={setOpened} onOpenHunter={setReading} onOpenRegion={setPerforming} />
+        onOpenVillage={setOpened} onOpenHunter={setReading} onOpenRegion={setPerforming}
+        onHunterOrder={onHunterOrder} />
       {world && <Prompts world={world} />}
+      {world && <Margin world={world} heard={heard} order={order} />}
       {opened && village && (
         <NoticeBoard
           key={`${opened.slot}/${village.slug}`}

@@ -84,6 +84,42 @@ export function parse(text: string): Block[] {
   return blocks
 }
 
+/**
+ * A hunter's words as one run of plain text: the words it wrote, in the order it wrote them, with
+ * the marks and the shape gone and every run of whitespace a single space. It is what a leaf says
+ * at a glance, where there is room for two lines and none for a heading, a table or a fence.
+ */
+export function plain(text: string): string {
+  return blockWords(parse(text)).replace(/\s+/g, " ").trim()
+}
+
+/** The words of a run of blocks, each block set off from the next by a space. */
+function blockWords(blocks: Block[]): string {
+  return blocks
+    .map((block) => {
+      switch (block.kind) {
+        case "code":
+          return block.text
+        case "list":
+          return block.items.map(spanWords).join(" ")
+        case "table":
+          return [block.head, ...block.rows].map((row) => row.map(spanWords).join(" ")).join(" ")
+        case "rule":
+          return ""
+        default:
+          return spanWords(block.spans)
+      }
+    })
+    .join(" ")
+}
+
+/** The words of a run of spans, joined as the hunter wrote them, with nothing put between. */
+function spanWords(spans: Span[]): string {
+  return spans
+    .map((span) => (span.kind === "strong" || span.kind === "emphasis" ? spanWords(span.spans) : span.text))
+    .join("")
+}
+
 /** Whether a line ends the paragraph above it by beginning a block of its own. */
 function startsBlock(lines: string[], at: number): boolean {
   const line = lines[at] ?? ""

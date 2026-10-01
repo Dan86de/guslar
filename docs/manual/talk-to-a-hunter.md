@@ -3,12 +3,14 @@
 A user opens a hunter's journal from its figure on the map and reads its session as it happens: what Guslar sent it, what it says, and each tool it calls.
 The journal stands beside the map, so the hunter can still be watched, and takes a typed reply, which goes to the session as your next message.
 What the hunter says is set as type in the leaf's own hand - headings, lists, tables and code take their shape - so the longer and more structured an answer is, the more readable it gets.
+Every hunter on the map also stands a leaf in a margin down the map's right edge, saying who it is, how long ago it spoke, and its latest words in two lines, so what everyone is up to is read at a glance with nothing opened.
 
 ## Entry points
 
 - A hunter on the map: its name over its head, or its figure, which opens its journal.
 - The journal's reply box, sent with `Send` or with Enter.
 - The world broadcast on `/ws` (and `/api/world`), which carries every hunter's `"journal"`.
+- The margin down the map's right edge: one leaf per hunter on the map, saying its latest words.
 
 ## Steps
 
@@ -48,6 +50,19 @@ Run `verify press ArrowRight` twelve times, then `verify screenshot code-scrolle
 The block alone has moved: it is scrolled to the end of its longest line, `10.75, 11.0]` now standing at its right edge with the shadow gone from it and fallen on the left edge instead, the short first line scrolled out of sight, and the leaf, the entries above it and the painted world all exactly as they were.
 `verify snapshot` shows the text box `Reply to Dobromir` still holding `Set it to 2.4.`.
 
+- **A leaf for each hunter in the margin.** Run `verify press Escape` to put `Dobromir`'s journal away, then `verify snapshot`.
+A region `Leaves` holds three articles, in the order their hunters stand down the map: `Wojmir`, then `Dobromir`, then `Bogna`, the three villages' hunters in the order they stand across the forest.
+Each leaf reads its hunter's name, then how long ago that hunter spoke, `just now` under a minute and `<n> min ago` once one has passed, so which of the two a leaf says depends on how long the run has taken to reach here, then its latest words with none of the marks it wrote them with: `The plank road is laid in oak.` for `Wojmir`; `The gauge reads depth = 2.4 and the sill is cut from timber = "oak". weir.gauge = 2.4 weir.readings = [0.5, 1.25, 2.4, 3.75, 4.0, 5.5, 6.25, 7.0, 8.125, 9.5, 10.75, 11.0]` for `Dobromir`; and `The weir is mended. See the measurements for the rest.` for `Bogna`.
+`Dobromir` spoke last of the three, and its leaf alone reads `Dobromir , spoke last`.
+- **The look of the margin.** Run `verify screenshot margin` and `verify screenshot margin-close --clip 1130,0,310,290 --zoom 3`, and open both.
+Down the map's right edge, clear of its top and its right, stand three small parchment leaves in the plaques' bone and ink, one under the other with a gap between them: each has its hunter's name in small capitals at the left and the time since it spoke in small italics at the right, and its words in ink under them, cut off at the end of the second line however much more it said.
+`Dobromir`'s leaf, the one heard last, stands on a lighter parchment framed in rust, with a rust bar down its left edge; the other two are framed in ink.
+No leaf's words overlap, run out of their leaf or reach a third line, no leaf covers another, and the painted world is whole left of them.
+- **The mark moves to the hunter that speaks next.** Send a fourth hunter, to a rite of the region itself, which stands higher up the map than any of its villages.
+Run `verify click "Rites of Bogwater Reach"`, `verify click "Set the proof of kill"`, `verify click "Never ask"` and `verify press Escape`, then `verify wait-for "Jaromila , returned with a trophy, sent to set the proof of kill in Bogwater Reach"`.
+`verify snapshot`: the region `Leaves` holds four articles now, `Jaromila` the first of them, since it stands by the plaque above the villages, and its leaf alone reads `Jaromila , spoke last`; `Dobromir`'s no longer does.
+Run `verify pause 2500`, then `verify screenshot margin-moved` and `verify screenshot margin-moved-close --clip 1130,0,310,380 --zoom 3`, and open both: the rust mark is on the top leaf now and gone from `Dobromir`'s, and the four leaves still stand clear of one another.
+
 ## Behind it
 
 - **What the claude was sent.** `verify read claude.log`. After its start lines, the claude has `stdin: {"type":"user","message":{"role":"user","content":[{"type":"text","text":"/implement-slice .scratch/slices/drain-the-bog.json S3"}]}}`, then `sent result success` and `waiting for the next message`, then `stdin: {"type":"user","message":{"role":"user","content":[{"type":"text","text":"Oak, from the old grove."}]}}` and `replaying on`, then `sent assistant Edit`, `sent result success` and `replay done`, and last `stdin: {"type":"user","message":{"role":"user","content":[{"type":"text","text":"Pine next time."}]}}`.
@@ -64,4 +79,10 @@ The block alone has moved: it is scrolled to the end of its longest line, `10.75
 - Only what the hunter says is set as type. What you typed and what a tool was given are shown exactly as written, since neither was written as markdown.
 - An image, a raw HTML tag, or any construct the journal does not set, stays the plain text the hunter wrote: nothing a session writes can become markup on the page.
 - A fenced block with more than it can show is a tab stop, and scrolls sideways under the arrow keys; one that fits is neither, so short fences do not fill the tab order.
+- A leaf stands for every hunter on the map, whatever its state, and goes from the margin when its hunter leaves the map.
+- A hunter that has not spoken yet says `Not a word yet.` where its words would stand.
+- A leaf says its hunter's latest words as plain text: the shape the journal sets them in is for reading, and a leaf is for glancing.
+- How long ago a hunter spoke is counted from when this map heard it, not from a clock the server keeps: the broadcast carries one state of the world and no time at all, so a map just opened says every hunter spoke just now.
+- The leaves read the way the map reads: they stand in the order their hunters stand down it, and the hunter heard last is marked where it is rather than moved to the top.
+- The margin floats over the map's right edge, so the world under it is covered whenever any hunter is out; the journal is wider than the margin and stands over it while it is open.
 - Text that merely looks like markdown is set as markdown. A line that happens to start with a hash, or a stray run of pipes in a log, takes a shape the hunter did not intend; its characters survive, but its form may surprise.

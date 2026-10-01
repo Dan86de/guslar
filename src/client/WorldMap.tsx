@@ -53,6 +53,17 @@ function hunterPlaces(world: WorldState, aspect: number): HunterPlace[] {
 /** How far apart two hunters on the same ground stand, as a share of their height: a figure's width and a little. */
 const SIDE_BY_SIDE = 0.75
 
+/**
+ * Every hunter's id in the order its figure stands down the map, top to bottom and then left to
+ * right. Only the map knows it: where a hunter stands is laid out from its region, its village and
+ * the village art's own shape, and nothing of that reaches the broadcast.
+ */
+function hunterOrder(world: WorldState, aspect: number): string[] {
+  return hunterPlaces(world, aspect)
+    .sort((one, other) => one.at.y - other.at.y || one.at.x - other.at.x)
+    .map((place) => place.hunter.id)
+}
+
 /** A village the user opened: its region's slot and the spec's slug. */
 export type VillageRef = { slot: RegionSlot; slug: string }
 
@@ -71,6 +82,7 @@ export function WorldMap({
   onOpenVillage,
   onOpenHunter,
   onOpenRegion,
+  onHunterOrder,
 }: {
   /** The theme the map is painted in, for as long as it is mounted. */
   theme: Theme
@@ -80,6 +92,8 @@ export function WorldMap({
   onOpenHunter: (id: string) => void
   /** Opens a region's rites, by its slot. */
   onOpenRegion: (slot: RegionSlot) => void
+  /** Says the order the hunters stand in down the map, whenever it changes. */
+  onHunterOrder: (ids: string[]) => void
 }) {
   const words = useWords()
   const host = useRef<HTMLDivElement>(null)
@@ -279,7 +293,8 @@ export function WorldMap({
   useEffect(() => {
     if (!scene || !world) return
     scene.show(world)
-  }, [scene, world])
+    onHunterOrder(hunterOrder(world, scene.villageAspect))
+  }, [scene, world, onHunterOrder])
 
   const ready = Boolean(scene && world && view)
 

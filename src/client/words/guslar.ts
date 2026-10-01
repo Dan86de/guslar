@@ -231,6 +231,22 @@ export const guslar = {
     send: "Send",
   },
 
+  /** The margin of leaves down the map's right edge: each hunter's latest words at a glance. */
+  margin: {
+    leaves: "Leaves",
+    /** Said after the name on the leaf whose hunter spoke most recently. */
+    latest: ", spoke last",
+    /** In place of its words, on the leaf of a hunter that has said nothing yet. */
+    silent: "Not a word yet.",
+    /** How long ago a hunter spoke, as its leaf says it. */
+    ago: {
+      justNow: "just now",
+      minutes: (minutes: number) => `${minutes} min ago`,
+      hours: (hours: number) => `${hours} hr ago`,
+      days: (days: number) => (days === 1 ? "a day ago" : `${days} days ago`),
+    },
+  },
+
   petition: {
     requests: "Requests",
     /** Between the hunter's name and the tool in a petition's heading: `Wojmir asks to use Bash`. */

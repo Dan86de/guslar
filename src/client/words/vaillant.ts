@@ -220,6 +220,18 @@ export const vaillant: Words = {
     send: "Send",
   },
 
+  margin: {
+    leaves: "Notes",
+    latest: ", spoke last",
+    silent: "Nothing said yet.",
+    ago: {
+      justNow: "just now",
+      minutes: (minutes: number) => `${minutes} min ago`,
+      hours: (hours: number) => `${hours} hr ago`,
+      days: (days: number) => (days === 1 ? "a day ago" : `${days} days ago`),
+    },
+  },
+
   petition: {
     requests: "Sign-off requests",
     asks: " asks to use ",

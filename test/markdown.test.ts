@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { parse, type Block, type Span } from "../src/client/markdown.js"
+import { parse, plain, type Block, type Span } from "../src/client/markdown.js"
 
 const text = (said: string): Span => ({ kind: "text", text: said })
 
@@ -209,5 +209,28 @@ describe("reading a hunter's words", () => {
 
     expect(parse("```ts\nconst timber = \"oak\"")).toEqual([{ kind: "code", text: 'const timber = "oak"' }])
     expect(parse("```")).toEqual([{ kind: "code", text: "" }])
+  })
+})
+
+describe("a hunter's words at a glance", () => {
+  it("says the words of every block and span, with the marks and the shape gone", () => {
+    expect(plain("## Plan for S1\n\nI will **raise the sill** and run `npm run check`.")).toBe(
+      "Plan for S1 I will raise the sill and run npm run check.",
+    )
+    expect(plain("- Measure the old sill.\n- Cut the oak to length.")).toBe("Measure the old sill. Cut the oak to length.")
+    expect(plain("| Step | State |\n| --- | --- |\n| Lay the sill | done |")).toBe("Step State Lay the sill done")
+    expect(plain("> The old weir was never measured.\n\n---\n\n```\nweir.sill = \"oak\"\n```")).toBe(
+      'The old weir was never measured. weir.sill = "oak"',
+    )
+    expect(plain("See [the measurements](https://example.invalid/m) for the rest.")).toBe(
+      "See the measurements for the rest.",
+    )
+  })
+
+  it("keeps what it does not read as the words the hunter wrote, and comes back from anything", () => {
+    expect(plain("![a weir](weir.png) and <b>a tag</b>")).toBe("![a weir](weir.png) and <b>a tag</b>")
+    expect(plain("")).toBe("")
+    expect(plain("   \n\n  ")).toBe("")
+    expect(plain("```ts\nconst timber = \"oak\"")).toBe('const timber = "oak"')
   })
 })
